@@ -72,21 +72,8 @@ jobs:
         run: |
           brew install ffmpeg ttyd vhs
 
-      - name: Install render dependencies (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          choco install ffmpeg --yes --no-progress
-          go install github.com/charmbracelet/vhs@v0.10.0
-          $ttydDir = "$env:USERPROFILE\\ttyd"
-          New-Item -ItemType Directory -Path $ttydDir -Force | Out-Null
-          Invoke-WebRequest `
-            -Uri "https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.win32.exe" `
-            -OutFile "$ttydDir\\ttyd.exe"
-          "$env:USERPROFILE\go\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          "$ttydDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
       - name: Probe scripted render prerequisites
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           python - <<'PY'
@@ -120,6 +107,7 @@ jobs:
           PY
 
       - name: Portable mock render smoke
+        if: runner.os != 'Windows'
         run: |
           python -m terminal_demo_studio.cli run examples/mock/render_smoke.yaml --mode scripted_vhs --local --output-dir outputs --output gif
 
