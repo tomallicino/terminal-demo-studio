@@ -29,8 +29,10 @@ The `publish` workflow builds and uploads package artifacts via OIDC.
 3. `pytest tests -v`
 4. `./scripts/release_preflight.sh`
 5. `./scripts/readme_smoke.sh`
-6. CI matrix must pass on Linux, macOS, and Windows (including scripted_vhs smoke on Windows).
-7. Regenerate README media and verify no empty top header bar in any showcase GIF.
+6. CI matrix must pass on Linux, macOS, and Windows for lint/type/test/autonomous smoke.
+7. `scripted_vhs` CI smoke must pass on Linux and macOS.
+8. Windows `scripted_vhs` coverage is a tracked follow-up before claiming Windows scripted CI parity.
+9. Regenerate README media and verify no empty top header bar in any showcase GIF.
 
 ## Skill Publishing
 

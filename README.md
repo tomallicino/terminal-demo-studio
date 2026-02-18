@@ -2,7 +2,11 @@
 
 Deterministic terminal/TUI demos for docs, launch pages, and agent workflows.
 
+Release status: alpha.
+
 All media is generated from executed sessions (mock or real). No hand-edited frames.
+
+Built on top of [Charm VHS](https://github.com/charmbracelet/vhs), with a higher-level screenplay pipeline, validation/templates, before/after composition, and autonomous run artifacts.
 
 ![Hero demo: bugfix before/after](docs/media/hero-bugfix-sequential.gif)
 
@@ -52,7 +56,7 @@ Core workflows are local-first and do not require Docker.
 | --- | --- | --- | --- |
 | macOS | CI-rendered smoke | CI command/assert smoke | Optional |
 | Linux | CI-rendered smoke | CI command/assert smoke | Optional |
-| Windows 10/11 (native) | CI scripted render smoke (release gate) | CI command/assert smoke | Optional |
+| Windows 10/11 (native) | Supported, not CI-gated yet (tracked as follow-up) | CI command/assert smoke | Optional |
 
 Current autonomous scope: command/assert automation is release-ready. Interactive `input`/`key`/`hotkey` autonomy for complex live TUIs is tracked in `docs/autonomous-roadmap.md`.
 
@@ -107,7 +111,8 @@ studio doctor [--mode auto|scripted_vhs|autonomous_pty]
 ## Troubleshooting
 
 1. Missing labels in composed output:
-- Run `studio doctor --mode scripted_vhs` and ensure ffmpeg `drawtext` support is available.
+- Run `studio doctor --mode scripted_vhs` and check label renderer capability.
+- `drawtext` is preferred; Pillow image-overlay fallback is used when `drawtext` is unavailable.
 
 2. Docker not running:
 - Use `--local` or start Docker and retry.
