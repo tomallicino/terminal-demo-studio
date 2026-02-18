@@ -12,6 +12,47 @@ class DockerError(RuntimeError):
     """Raised when docker operations fail."""
 
 
+def _env_enabled(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _docker_hardening_flags() -> list[str]:
+    if not _env_enabled("TDS_DOCKER_HARDENING", True):
+        return []
+    flags = [
+        "--security-opt",
+        "no-new-privileges=true",
+        "--cap-drop",
+        "ALL",
+    ]
+    pids_limit = os.environ.get("TDS_DOCKER_PIDS_LIMIT", "512").strip()
+    if pids_limit:
+        flags.extend(["--pids-limit", pids_limit])
+    return flags
+
+
+def _docker_network_flags() -> list[str]:
+    network_mode = os.environ.get("TDS_DOCKER_NETWORK", "").strip()
+    if not network_mode:
+        return []
+    return ["--network", network_mode]
+
+
+def _docker_read_only_flags() -> list[str]:
+    if not _env_enabled("TDS_DOCKER_READ_ONLY", False):
+        return []
+    return [
+        "--read-only",
+        "--tmpfs",
+        "/tmp:rw,nosuid,nodev,size=256m",
+        "-e",
+        "HOME=/tmp",
+    ]
+
+
 def _container_path_to_host(path_value: str, project_root: Path) -> Path:
     normalized = path_value.replace("\\", "/")
     if normalized == "/workspace":
@@ -46,6 +87,41 @@ def _rewrite_summary_paths(summary_path: Path, project_root: Path) -> None:
     mapped = _map_workspace_strings(payload, project_root)
     if mapped != payload:
         summary_path.write_text(json.dumps(mapped, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _parse_result_output(stdout: str, project_root: Path) -> dict[str, Path | str | None]:
+    parsed: dict[str, Path | str | None] = {
+        "status": None,
+        "run_dir": None,
+        "events": None,
+        "summary": None,
+        "media_mp4": None,
+        "media_gif": None,
+    }
+    for line in stdout.splitlines():
+        if line.startswith("RUN_DIR="):
+            parsed["run_dir"] = _container_path_to_host(
+                line.removeprefix("RUN_DIR="), project_root
+            )
+        elif line.startswith("EVENTS="):
+            parsed["events"] = _container_path_to_host(
+                line.removeprefix("EVENTS="), project_root
+            )
+        elif line.startswith("SUMMARY="):
+            parsed["summary"] = _container_path_to_host(
+                line.removeprefix("SUMMARY="), project_root
+            )
+        elif line.startswith("MEDIA_MP4="):
+            parsed["media_mp4"] = _container_path_to_host(
+                line.removeprefix("MEDIA_MP4="), project_root
+            )
+        elif line.startswith("MEDIA_GIF="):
+            parsed["media_gif"] = _container_path_to_host(
+                line.removeprefix("MEDIA_GIF="), project_root
+            )
+        elif line.startswith("STATUS="):
+            parsed["status"] = line.removeprefix("STATUS=")
+    return parsed
 
 
 def _hash_files(base: Path, paths: list[Path]) -> str:
@@ -143,6 +219,8 @@ def run_in_docker(
     rebuild: bool = False,
     playback_mode: Literal["sequential", "simultaneous"] = "sequential",
     run_mode: Literal["scripted_vhs", "autonomous_video"] = "scripted_vhs",
+    agent_prompt_mode: Literal["auto", "manual", "approve", "deny"] = "auto",
+    media_redaction_mode: Literal["auto", "off", "input_line"] = "auto",
     produce_mp4: bool = True,
     produce_gif: bool = True,
 ) -> dict[str, Path | str | None]:
@@ -168,6 +246,9 @@ def run_in_docker(
         f"{project_root}:/workspace",
         "-w",
         "/workspace",
+        *_docker_hardening_flags(),
+        *_docker_network_flags(),
+        *_docker_read_only_flags(),
         "-e",
         "TERMINAL_DEMO_STUDIO_IN_CONTAINER=1",
     ]
@@ -187,6 +268,10 @@ def run_in_docker(
             "--local",
             "--mode",
             run_mode,
+            "--agent-prompts",
+            agent_prompt_mode,
+            "--redact",
+            media_redaction_mode,
             "--playback",
             playback_mode,
         ]
@@ -209,47 +294,34 @@ def run_in_docker(
         cmd.extend(["--output", "gif"])
 
     result = subprocess.run(cmd, check=False, capture_output=True, text=True)
-    if result.stdout:
-        print(result.stdout, end="")
-    if result.stderr:
-        print(result.stderr, end="")
+    if _env_enabled("TDS_DOCKER_VERBOSE", False):
+        if result.stdout:
+            print(result.stdout, end="")
+        if result.stderr:
+            print(result.stderr, end="")
+    parsed_output = _parse_result_output(result.stdout, project_root)
+    summary_path = parsed_output.get("summary")
+    if isinstance(summary_path, Path):
+        _rewrite_summary_paths(summary_path, project_root)
+
     if result.returncode != 0:
         message = result.stderr.strip() or result.stdout.strip() or "docker run failed"
+        if isinstance(parsed_output.get("run_dir"), Path):
+            message = f"{message}\nRUN_DIR={parsed_output['run_dir']}"
+        if isinstance(parsed_output.get("summary"), Path):
+            message = f"{message}\nSUMMARY={parsed_output['summary']}"
+        if isinstance(parsed_output.get("events"), Path):
+            message = f"{message}\nEVENTS={parsed_output['events']}"
         raise DockerError(message)
 
     parsed: dict[str, Path | str | None] = {
         "status": "success",
-        "run_dir": None,
-        "events": None,
-        "summary": None,
-        "media_mp4": None,
-        "media_gif": None,
+        "run_dir": parsed_output.get("run_dir"),
+        "events": parsed_output.get("events"),
+        "summary": parsed_output.get("summary"),
+        "media_mp4": parsed_output.get("media_mp4"),
+        "media_gif": parsed_output.get("media_gif"),
     }
-    for line in result.stdout.splitlines():
-        if line.startswith("RUN_DIR="):
-            parsed["run_dir"] = _container_path_to_host(
-                line.removeprefix("RUN_DIR="), project_root
-            )
-        elif line.startswith("EVENTS="):
-            parsed["events"] = _container_path_to_host(
-                line.removeprefix("EVENTS="), project_root
-            )
-        elif line.startswith("SUMMARY="):
-            parsed["summary"] = _container_path_to_host(
-                line.removeprefix("SUMMARY="), project_root
-            )
-        elif line.startswith("MEDIA_MP4="):
-            parsed["media_mp4"] = _container_path_to_host(
-                line.removeprefix("MEDIA_MP4="), project_root
-            )
-        elif line.startswith("MEDIA_GIF="):
-            parsed["media_gif"] = _container_path_to_host(
-                line.removeprefix("MEDIA_GIF="), project_root
-            )
-        elif line.startswith("STATUS="):
-            parsed["status"] = line.removeprefix("STATUS=")
-
-    summary_path = parsed.get("summary")
-    if isinstance(summary_path, Path):
-        _rewrite_summary_paths(summary_path, project_root)
+    if isinstance(parsed_output.get("status"), str):
+        parsed["status"] = parsed_output["status"]
     return parsed

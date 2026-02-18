@@ -7,6 +7,8 @@ RUN if command -v apk >/dev/null 2>&1; then \
         ffmpeg \
         git \
         kitty \
+        nodejs \
+        npm \
         python3 \
         py3-pip \
         ttyd \
@@ -23,6 +25,8 @@ RUN if command -v apk >/dev/null 2>&1; then \
         ffmpeg \
         git \
         kitty \
+        nodejs \
+        npm \
         python3 \
         python3-pip \
         xvfb \
@@ -38,6 +42,7 @@ COPY . /app/src
 
 RUN pip3 install --break-system-packages /app/src
 RUN pip3 install --break-system-packages -r /app/src/requirements.txt
+RUN npm install -g @openai/codex@0.93.0
 
 RUN curl -fsSL https://starship.rs/install.sh | sh -s -- -y -v v1.24.2
 RUN echo 'eval "$(starship init bash)"' >> /root/.bashrc

@@ -1,12 +1,12 @@
 # Architecture
 
-`terminal-demo-studio` has three execution lanes with one shared artifact contract.
+`terminal-demo-studio` has three execution lanes (scripted, interactive, visual) with one shared artifact contract.
 
 ## High-Level Flow
 
-1. `tds` receives command (`render`, `run`, `new`, `init`, `validate`, `doctor`, `debug`).
+1. `tds` receives command (`render`, `run`, `new`, `init`, `validate`, `lint`, `doctor`, `debug`).
 2. Screenplay is loaded and validated (`models.py`) with variable interpolation.
-3. Lane selection is resolved from `--mode` or screenplay scenarios.
+3. Lane selection is resolved from `--mode` aliases or screenplay scenarios.
 4. Canonical run layout is created (`artifacts.py`).
 5. Lane execution runs and emits media/events/summary/failure artifacts.
 6. CLI prints machine-friendly keys (`STATUS`, `RUN_DIR`, `MEDIA_*`, `SUMMARY`, `EVENTS`).
@@ -31,6 +31,12 @@
   - `autonomous_pty` command/assert runtime.
 - `terminal_demo_studio/runtime/video_runner.py`
   - `autonomous_video` runtime for interactive capture (experimental).
+- `terminal_demo_studio/linting.py`
+  - screenplay linting (`tds lint`) for policy and action compatibility checks.
+- `terminal_demo_studio/prompt_policy.py`
+  - shared prompt-loop policy merge + lint logic.
+- `terminal_demo_studio/redaction.py`
+  - media redaction mode resolution (`auto|off|input_line`) and sensitivity heuristics.
 - `terminal_demo_studio/runtime/shells.py`
   - cross-platform shell launcher logic.
 - `terminal_demo_studio/doctor.py`
@@ -40,21 +46,25 @@
 
 ## Execution Lanes
 
-### `scripted_vhs` (stable)
+### Scripted (`scripted_vhs`, stable)
 
 - Deterministic playback from compiled tapes.
 - Supports composed multi-pane outputs and showcase-friendly GIF/MP4 assets.
 
-### `autonomous_pty` (stable, command/assert scope)
+### Interactive (`autonomous_pty`, stable command/assert scope)
 
 - Closed-loop setup/command execution with wait/assert checks.
 - Writes runtime events and failure bundles.
 - Interactive primitives (`input`/`key`/`hotkey`) are currently guarded.
 
-### `autonomous_video` (experimental)
+### Visual (`autonomous_video`, experimental)
 
 - Interactive full-screen capture lane via Kitty + virtual display stack.
 - Intended for complex TUI-style automation with visual output capture.
+- Supports `agent_prompts` policies (`manual`, `approve`, `deny`) for bounded prompt loops.
+- Applies pre-execution policy linting for approve mode safety.
+- Enforces optional `allowed_command_prefixes` before automated approval.
+- Composes final media with optional input-line redaction masking.
 - Not promoted as stable in README quickstart.
 
 ## Canonical Run Artifact Layout

@@ -113,6 +113,145 @@ def test_run_in_docker_forwards_explicit_run_mode(monkeypatch: object) -> None:
     assert cmd[cmd.index("--mode") + 1] == "autonomous_video"
 
 
+def test_run_in_docker_forwards_agent_prompt_mode(monkeypatch: object) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_ensure_image(project_root: Path, rebuild: bool = False) -> str:
+        return "terminal-demo-studio:test"
+
+    def fake_run(
+        cmd: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="STATUS=success\nRUN_DIR=/tmp/tds/run\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(docker_runner, "ensure_image", fake_ensure_image)
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    project_root = Path(docker_runner.__file__).resolve().parents[1]
+    screenplay = project_root / "examples" / "mock" / "autonomous_video_codex_like.yaml"
+
+    docker_runner.run_in_docker(
+        screenplay_path=screenplay,
+        run_mode="autonomous_video",
+        agent_prompt_mode="approve",
+    )
+
+    cmd = captured["cmd"]
+    assert isinstance(cmd, list)
+    assert "--agent-prompts" in cmd
+    assert cmd[cmd.index("--agent-prompts") + 1] == "approve"
+
+
+def test_run_in_docker_forwards_media_redaction_mode(monkeypatch: object) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_ensure_image(project_root: Path, rebuild: bool = False) -> str:
+        return "terminal-demo-studio:test"
+
+    def fake_run(
+        cmd: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="STATUS=success\nRUN_DIR=/tmp/tds/run\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(docker_runner, "ensure_image", fake_ensure_image)
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    project_root = Path(docker_runner.__file__).resolve().parents[1]
+    screenplay = project_root / "examples" / "mock" / "autonomous_video_codex_like.yaml"
+
+    docker_runner.run_in_docker(
+        screenplay_path=screenplay,
+        run_mode="autonomous_video",
+        media_redaction_mode="input_line",
+    )
+
+    cmd = captured["cmd"]
+    assert isinstance(cmd, list)
+    assert "--redact" in cmd
+    assert cmd[cmd.index("--redact") + 1] == "input_line"
+
+
+def test_run_in_docker_is_quiet_by_default(monkeypatch: object) -> None:
+    printed: list[str] = []
+
+    def fake_ensure_image(project_root: Path, rebuild: bool = False) -> str:
+        return "terminal-demo-studio:test"
+
+    def fake_run(
+        cmd: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        _ = check
+        _ = capture_output
+        _ = text
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="STATUS=success\nRUN_DIR=/tmp/tds/run\n",
+            stderr="ffmpeg noise",
+        )
+
+    def fake_print(*args: object, **kwargs: object) -> None:
+        _ = kwargs
+        printed.append(" ".join(str(part) for part in args))
+
+    monkeypatch.setattr(docker_runner, "ensure_image", fake_ensure_image)
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+    monkeypatch.setattr("builtins.print", fake_print)
+
+    project_root = Path(docker_runner.__file__).resolve().parents[1]
+    screenplay = project_root / "examples" / "mock" / "autonomous_video_codex_like.yaml"
+    docker_runner.run_in_docker(screenplay_path=screenplay)
+
+    assert printed == []
+
+
+def test_run_in_docker_can_stream_logs_when_verbose_enabled(monkeypatch: object) -> None:
+    printed: list[str] = []
+
+    def fake_ensure_image(project_root: Path, rebuild: bool = False) -> str:
+        return "terminal-demo-studio:test"
+
+    def fake_run(
+        cmd: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        _ = check
+        _ = capture_output
+        _ = text
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="STATUS=success\nRUN_DIR=/tmp/tds/run\n",
+            stderr="ffmpeg noise",
+        )
+
+    def fake_print(*args: object, **kwargs: object) -> None:
+        _ = kwargs
+        printed.append(" ".join(str(part) for part in args))
+
+    monkeypatch.setattr(docker_runner, "ensure_image", fake_ensure_image)
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+    monkeypatch.setattr("builtins.print", fake_print)
+    monkeypatch.setenv("TDS_DOCKER_VERBOSE", "1")
+
+    project_root = Path(docker_runner.__file__).resolve().parents[1]
+    screenplay = project_root / "examples" / "mock" / "autonomous_video_codex_like.yaml"
+    docker_runner.run_in_docker(screenplay_path=screenplay)
+
+    assert any("STATUS=success" in line for line in printed)
+
+
 def test_ensure_docker_reachable_raises_clear_error_when_docker_missing(
     monkeypatch: object,
 ) -> None:
@@ -268,3 +407,118 @@ def test_run_in_docker_forwards_openai_env_vars(monkeypatch: object) -> None:
     assert "OPENAI_API_KEY" in cmd
     assert "OPENAI_BASE_URL" in cmd
     assert "OPENAI_ORGANIZATION" in cmd
+
+
+def test_run_in_docker_applies_hardening_flags_by_default(monkeypatch: object) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_ensure_image(project_root: Path, rebuild: bool = False) -> str:
+        return "terminal-demo-studio:test"
+
+    def fake_run(
+        cmd: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="STATUS=success\nRUN_DIR=/tmp/tds/run\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(docker_runner, "ensure_image", fake_ensure_image)
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+    monkeypatch.delenv("TDS_DOCKER_HARDENING", raising=False)
+    monkeypatch.delenv("TDS_DOCKER_PIDS_LIMIT", raising=False)
+
+    project_root = Path(docker_runner.__file__).resolve().parents[1]
+    screenplay = project_root / "examples" / "mock" / "autonomous_video_codex_like.yaml"
+    docker_runner.run_in_docker(screenplay_path=screenplay)
+
+    cmd = captured["cmd"]
+    assert isinstance(cmd, list)
+    assert "--security-opt" in cmd
+    assert cmd[cmd.index("--security-opt") + 1] == "no-new-privileges=true"
+    assert "--cap-drop" in cmd
+    assert cmd[cmd.index("--cap-drop") + 1] == "ALL"
+    assert "--pids-limit" in cmd
+    assert cmd[cmd.index("--pids-limit") + 1] == "512"
+
+
+def test_run_in_docker_respects_hardening_env_overrides(monkeypatch: object) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_ensure_image(project_root: Path, rebuild: bool = False) -> str:
+        return "terminal-demo-studio:test"
+
+    def fake_run(
+        cmd: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="STATUS=success\nRUN_DIR=/tmp/tds/run\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(docker_runner, "ensure_image", fake_ensure_image)
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+    monkeypatch.setenv("TDS_DOCKER_HARDENING", "0")
+    monkeypatch.setenv("TDS_DOCKER_NETWORK", "none")
+    monkeypatch.setenv("TDS_DOCKER_READ_ONLY", "1")
+
+    project_root = Path(docker_runner.__file__).resolve().parents[1]
+    screenplay = project_root / "examples" / "mock" / "autonomous_video_codex_like.yaml"
+    docker_runner.run_in_docker(screenplay_path=screenplay)
+
+    cmd = captured["cmd"]
+    assert isinstance(cmd, list)
+    assert "--security-opt" not in cmd
+    assert "--cap-drop" not in cmd
+    assert "--network" in cmd
+    assert cmd[cmd.index("--network") + 1] == "none"
+    assert "--read-only" in cmd
+    assert "--tmpfs" in cmd
+
+
+def test_run_in_docker_failure_includes_host_paths(monkeypatch: object) -> None:
+    def fake_ensure_image(project_root: Path, rebuild: bool = False) -> str:
+        return "terminal-demo-studio:test"
+
+    def fake_run(
+        cmd: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=1,
+            stdout=(
+                "STATUS=failed\n"
+                "RUN_DIR=/workspace/examples/mock/.terminal_demo_studio_runs/run-err\n"
+                "SUMMARY=/workspace/examples/mock/.terminal_demo_studio_runs/run-err/summary.json\n"
+                "EVENTS=/workspace/examples/mock/.terminal_demo_studio_runs/run-err/runtime/events.jsonl\n"
+            ),
+            stderr="autonomous run failed",
+        )
+
+    monkeypatch.setattr(docker_runner, "ensure_image", fake_ensure_image)
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    project_root = Path(docker_runner.__file__).resolve().parents[1]
+    screenplay = project_root / "examples" / "mock" / "autonomous_video_codex_like.yaml"
+
+    with pytest.raises(docker_runner.DockerError) as exc_info:
+        docker_runner.run_in_docker(screenplay_path=screenplay, run_mode="autonomous_video")
+
+    message = str(exc_info.value)
+    run_dir = (project_root / "examples/mock/.terminal_demo_studio_runs/run-err").resolve()
+    assert str(run_dir) in message
+    assert (
+        str(
+            (
+                project_root
+                / "examples/mock/.terminal_demo_studio_runs/run-err/summary.json"
+            ).resolve()
+        )
+        in message
+    )

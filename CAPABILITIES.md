@@ -3,7 +3,11 @@
 Canonical map of shipped behavior in this repository.
 
 ## CAP-STUDIO-001: `tds` CLI Command Surface
-- Behavior: Exposes `render`, `run`, `validate`, `new`, `init`, `doctor`, and `debug` commands.
+- Behavior:
+  - Exposes `render`, `run`, `validate`, `lint`, `new`, `init`, `doctor`, and `debug` commands.
+  - Supports friendly lane aliases (`scripted`, `interactive`, `visual`) in addition to canonical mode IDs.
+  - Exposes `--agent-prompts auto|manual|approve|deny` for visual-lane prompt loop behavior.
+  - Exposes `--redact auto|off|input_line` for media masking control.
 - Entry points:
   - `terminal_demo_studio/cli.py`
   - `pyproject.toml` (`[project.scripts] tds`)
@@ -72,7 +76,13 @@ Canonical map of shipped behavior in this repository.
   - `tests/test_runtime_runner.py::test_autonomous_runner_fails_on_interactive_key_action`
 
 ## CAP-STUDIO-009: Autonomous Video Lane (`autonomous_video`) (experimental)
-- Behavior: Captures interactive terminal UI sessions via virtual display + kitty remote control + ffmpeg.
+- Behavior:
+  - Captures interactive terminal UI sessions via virtual display + kitty remote control + ffmpeg.
+  - Supports bounded prompt loops with policy-driven auto approve/deny.
+  - Supports optional command-prefix allowlisting (`allowed_command_prefixes`) before approvals.
+  - Fails fast with remediation guidance when manual prompt mode blocks a wait gate.
+  - Lints approve policies before execution (`allow_regex` required; unbounded approve patterns blocked by default).
+  - Supports media redaction during composition (`auto|off|input_line`).
 - Entry points:
   - `terminal_demo_studio/runtime/video_runner.py` (`run_autonomous_video_screenplay`)
 - Evidence:
@@ -165,3 +175,31 @@ Canonical map of shipped behavior in this repository.
   - `examples/mock/autonomous_video_claude_like.yaml`
 - Evidence:
   - `tests/test_runtime_video_runner.py`
+
+## CAP-STUDIO-020: Autonomous Video Safety Hardening
+- Behavior:
+  - Redacts sensitive values in failure bundles (`reason.txt`, `screen.txt`, `video_runner.log`, and step metadata).
+  - Bounds `preinstall` and `scenario.setup` shell commands with configurable timeout.
+  - Applies hardened Docker defaults for container runs (`no-new-privileges`, dropped capabilities, PID limits).
+  - Restricts Kitty remote control to `socket-only` and uses private per-scenario socket directories.
+- Entry points:
+  - `terminal_demo_studio/runtime/video_runner.py`
+  - `terminal_demo_studio/docker_runner.py`
+- Evidence:
+  - `tests/test_runtime_video_runner.py::test_video_runner_redacts_sensitive_values_in_failure_bundle`
+  - `tests/test_runtime_video_runner.py::test_run_shell_command_times_out`
+  - `tests/test_runtime_video_runner.py::test_start_kitty_uses_socket_only_remote_control`
+  - `tests/test_runtime_video_runner.py::test_video_runner_cleans_private_socket_dir`
+  - `tests/test_docker_runner.py::test_run_in_docker_applies_hardening_flags_by_default`
+
+## CAP-STUDIO-021: Screenplay Linting (`tds lint`)
+- Behavior:
+  - Validates screenplay-level safety constraints without executing runs.
+  - Emits human-readable findings or machine-readable JSON output.
+  - Can treat warnings as failures with `--strict`.
+- Entry points:
+  - `terminal_demo_studio/linting.py`
+  - `terminal_demo_studio/cli.py` (`lint`)
+- Evidence:
+  - `tests/test_cli.py::test_lint_passes_for_safe_autonomous_video_policy`
+  - `tests/test_cli.py::test_lint_json_outputs_machine_readable_payload`

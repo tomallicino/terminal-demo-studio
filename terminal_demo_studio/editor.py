@@ -21,6 +21,7 @@ DurationProbe = Callable[[Path], float]
 PlaybackMode = Literal["sequential", "simultaneous"]
 HeaderMode = Literal["auto", "always", "never"]
 LabelRenderer = Literal["drawtext", "image_overlay", "none"]
+MediaRedactionMode = Literal["off", "input_line"]
 
 TARGET_HEIGHT = 840
 FRAME_RATE = 30
@@ -298,6 +299,7 @@ def _build_filter_complex(
     header_mode: HeaderMode,
     label_renderer: LabelRenderer,
     label_input_start: int,
+    redaction_mode: MediaRedactionMode,
 ) -> str:
     draw_header = header_mode == "always"
     pane_top = CANVAS_MARGIN + (HEADER_HEIGHT if draw_header else 0)
@@ -343,7 +345,7 @@ def _build_filter_complex(
                     f"borderw=1:bordercolor={LABEL_BORDER_COLOR}:"
                     "shadowcolor=0x000000@0.6:shadowx=0:shadowy=2"
                 )
-            filter_parts.append(f"[styled]{','.join(draw_parts)}[outv]")
+            filter_parts.append(f"[styled]{','.join(draw_parts)}[bodyv]")
         elif draw_labels and label_renderer == "image_overlay":
             pane_width_expr = (
                 f"(main_w-{2 * CANVAS_MARGIN}-{(input_count - 1) * PANE_GAP})/{input_count}"
@@ -355,7 +357,7 @@ def _build_filter_complex(
                     f"+{index}*({pane_width_expr}+{PANE_GAP})"
                     f"+({pane_width_expr})/2-overlay_w/2"
                 )
-                output_tag = "[outv]" if index == input_count - 1 else f"[ol{index}]"
+                output_tag = "[bodyv]" if index == input_count - 1 else f"[ol{index}]"
                 filter_parts.append(
                     f"{current}[{label_input_start + index}:v]"
                     "overlay="
@@ -365,9 +367,23 @@ def _build_filter_complex(
                 )
                 current = output_tag
         else:
-            filter_parts.append("[styled]copy[outv]")
+            filter_parts.append("[styled]copy[bodyv]")
     else:
-        filter_parts.append("[stacked]copy[outv]")
+        filter_parts.append("[stacked]copy[bodyv]")
+
+    if redaction_mode == "input_line":
+        filter_parts.append(
+            "[bodyv]"
+            "drawbox=x=0:"
+            "y=ih-max(96\\,ih*0.12):"
+            "w=iw:"
+            "h=max(96\\,ih*0.12):"
+            "color=black@0.98:"
+            "t=fill"
+            "[outv]"
+        )
+    else:
+        filter_parts.append("[bodyv]copy[outv]")
 
     return ";".join(filter_parts)
 
@@ -376,13 +392,14 @@ def compose_split_screen(
     inputs: list[Path],
     labels: list[str],
     output_mp4: Path,
-    output_gif: Path,
+    output_gif: Path | None,
     run_cmd: CommandRunner = _default_run,
     supports_drawtext: bool | None = None,
     supports_image_labels: bool | None = None,
     playback_mode: PlaybackMode = "sequential",
     probe_duration: DurationProbe = _probe_duration,
     header_mode: HeaderMode = "auto",
+    redaction_mode: MediaRedactionMode = "off",
 ) -> None:
     if len(inputs) < 1:
         raise ValueError("At least one input video is required for output")
@@ -390,6 +407,8 @@ def compose_split_screen(
         raise ValueError(f"Unsupported playback mode: {playback_mode}")
     if header_mode not in {"auto", "always", "never"}:
         raise ValueError(f"Unsupported header mode: {header_mode}")
+    if redaction_mode not in {"off", "input_line"}:
+        raise ValueError(f"Unsupported redaction mode: {redaction_mode}")
 
     if supports_drawtext is None:
         supports_drawtext = _detect_drawtext_support()
@@ -436,6 +455,7 @@ def compose_split_screen(
             header_mode=resolved_header_mode,
             label_renderer=label_renderer,
             label_input_start=len(inputs),
+            redaction_mode=redaction_mode,
         )
 
         mp4_cmd: list[str] = ["ffmpeg", "-y"]
@@ -461,18 +481,18 @@ def compose_split_screen(
             ]
         )
 
-        gif_cmd = [
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(output_mp4),
-            "-filter_complex",
-            "fps=18,split[s0][s1];[s0]palettegen=stats_mode=diff[p];"
-            "[s1][p]paletteuse=dither=sierra2_4a",
-            "-loop",
-            "0",
-            str(output_gif),
-        ]
-
         run_cmd(mp4_cmd, True)
-        run_cmd(gif_cmd, True)
+        if output_gif is not None:
+            gif_cmd = [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(output_mp4),
+                "-filter_complex",
+                "fps=18,split[s0][s1];[s0]palettegen=stats_mode=diff[p];"
+                "[s1][p]paletteuse=dither=sierra2_4a",
+                "-loop",
+                "0",
+                str(output_gif),
+            ]
+            run_cmd(gif_cmd, True)
