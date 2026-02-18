@@ -24,6 +24,30 @@ def _list_templates() -> list[str]:
     return list_template_names()
 
 
+def _write_screenplay_from_template(
+    *,
+    name: str,
+    destination: Path,
+    template: str,
+    force: bool,
+) -> tuple[Path, bool]:
+    destination.mkdir(parents=True, exist_ok=True)
+    output_path = destination / f"{name}.yaml"
+    overwritten = output_path.exists()
+    if overwritten and not force:
+        raise click.ClickException(f"File already exists: {output_path}")
+
+    content = read_template(template)
+    content = re.sub(
+        r'(?m)^output:\s*".*"$',
+        f'output: "{name}"',
+        content,
+        count=1,
+    )
+    output_path.write_text(content, encoding="utf-8")
+    return output_path, overwritten
+
+
 @click.group(help="Terminal Demo Studio: deterministic, agent-native CLI demo pipeline")
 def app() -> None:
     pass
@@ -193,25 +217,60 @@ def new(
         raise click.ClickException(
             f"Unknown template '{template}'. Use --list-templates to see valid options."
         )
-
-    destination.mkdir(parents=True, exist_ok=True)
-    output_path = destination / f"{name}.yaml"
-    overwritten = output_path.exists()
-    if output_path.exists() and not force:
-        raise click.ClickException(f"File already exists: {output_path}")
-
-    content = read_template(template)
-    content = re.sub(
-        r'(?m)^output:\s*".*"$',
-        f'output: "{name}"',
-        content,
-        count=1,
+    output_path, overwritten = _write_screenplay_from_template(
+        name=name,
+        destination=destination,
+        template=template,
+        force=force,
     )
-    output_path.write_text(content, encoding="utf-8")
     click.echo(f"Created screenplay: {output_path}")
     click.echo(f"Template: {template}")
     click.echo(f"Overwritten: {'yes' if overwritten else 'no'}")
     click.echo(f"Next: studio validate {output_path}")
+
+
+@app.command("init")
+@click.option(
+    "destination",
+    "--destination",
+    type=click.Path(path_type=Path),
+    default=Path("."),
+    show_default=True,
+)
+@click.option("template", "--template", type=str, default="mock_wizard", show_default=True)
+@click.option("name", "--name", type=str, default="getting_started", show_default=True)
+@click.option("force", "--force", is_flag=True, default=False)
+def init(destination: Path, template: str, name: str, force: bool) -> None:
+    templates = _list_templates()
+    if template not in templates:
+        message = (
+            f"Unknown template '{template}'. "
+            "Use 'studio new --list-templates' to see valid options."
+        )
+        raise click.ClickException(message)
+
+    workspace = destination
+    screenplays_dir = workspace / "screenplays"
+    outputs_dir = workspace / "outputs"
+    screenplays_dir.mkdir(parents=True, exist_ok=True)
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path, overwritten = _write_screenplay_from_template(
+        name=name,
+        destination=screenplays_dir,
+        template=template,
+        force=force,
+    )
+
+    click.echo(f"Initialized workspace: {workspace.resolve()}")
+    click.echo(f"Starter screenplay: {output_path}")
+    click.echo(f"Template: {template}")
+    click.echo(f"Overwritten: {'yes' if overwritten else 'no'}")
+    click.echo(f"Next: studio validate {output_path}")
+    click.echo(
+        "Then: "
+        f"studio run {output_path} --mode scripted_vhs --local --output-dir {outputs_dir}"
+    )
 
 
 @app.command("doctor")

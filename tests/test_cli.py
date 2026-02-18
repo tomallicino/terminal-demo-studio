@@ -436,3 +436,32 @@ def test_run_auto_mode_uses_autonomous_when_scenario_declares_it(
 
     assert result.exit_code == 0
     assert called["autonomous"] is True
+
+
+def test_init_creates_starter_workspace(tmp_path: Path) -> None:
+    runner = CliRunner()
+    workspace = tmp_path / "workspace"
+
+    result = runner.invoke(cli.app, ["init", "--destination", str(workspace)])
+
+    assert result.exit_code == 0
+    assert (workspace / "screenplays").is_dir()
+    assert (workspace / "outputs").is_dir()
+    starter = workspace / "screenplays" / "getting_started.yaml"
+    assert starter.exists()
+    assert 'output: "getting_started"' in starter.read_text(encoding="utf-8")
+    assert "studio run" in result.output
+
+
+def test_init_respects_existing_file_without_force(tmp_path: Path) -> None:
+    runner = CliRunner()
+    workspace = tmp_path / "workspace"
+    screenplays = workspace / "screenplays"
+    screenplays.mkdir(parents=True)
+    starter = screenplays / "getting_started.yaml"
+    starter.write_text("title: Existing\n", encoding="utf-8")
+
+    result = runner.invoke(cli.app, ["init", "--destination", str(workspace)])
+
+    assert result.exit_code != 0
+    assert "already exists" in result.output

@@ -22,10 +22,15 @@ check_forbidden_content() {
   local pattern="$1"
   local message="$2"
   local hits
-  hits="$(git ls-files --cached --others --exclude-standard \
-    | rg -v '^docs/media/' \
-    | rg -v '^scripts/release_preflight\.sh$' \
-    | xargs -I{} rg -n "$pattern" "{}" || true)"
+  hits="$(
+    git ls-files --cached --others --exclude-standard \
+      | rg -v '^docs/media/' \
+      | rg -v '^scripts/release_preflight\.sh$' \
+      | while read -r file; do
+          [[ -f "$file" ]] || continue
+          rg -n "$pattern" "$file" || true
+        done
+  )"
   if [[ -n "$hits" ]]; then
     echo "[FAIL] $message"
     echo "$hits"

@@ -10,6 +10,9 @@ source .venv/bin/activate
 pip install -e '.[dev]'
 
 studio doctor --mode auto
+tmp_workspace="$(mktemp -d)"
+studio init --destination "$tmp_workspace"
+studio validate "$tmp_workspace/screenplays/getting_started.yaml" --explain
 studio validate examples/mock/safety_wizard.yaml --explain
 studio run examples/mock/safety_wizard.yaml --mode scripted_vhs --local --output-dir outputs --no-mp4
 studio run examples/mock/agent_loop.yaml --mode autonomous_pty --output-dir outputs

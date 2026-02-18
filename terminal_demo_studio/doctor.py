@@ -26,6 +26,18 @@ def _binary_exists(name: str) -> bool:
     return shutil.which(name) is not None
 
 
+def _missing_tool_hint(tool: str, mode: DoctorMode) -> str:
+    if mode == "autonomous_pty":
+        return (
+            f"{tool} not found in PATH. Optional for autonomous mode; "
+            "required for local scripted_vhs rendering."
+        )
+    return (
+        f"{tool} not found in PATH. Install it for local scripted_vhs mode, "
+        "or run with --docker when Docker is available."
+    )
+
+
 def _ffmpeg_has_drawtext() -> bool:
     if not _binary_exists("ffmpeg"):
         return False
@@ -135,20 +147,24 @@ def run_doctor_checks(mode: DoctorMode = "auto") -> list[tuple[str, bool, str]]:
     ffprobe_ok = _binary_exists("ffprobe")
 
     checks.append(
-        ("local-vhs", vhs_ok, "vhs found in PATH" if vhs_ok else "vhs not found in PATH")
+        ("local-vhs", vhs_ok, "vhs found in PATH" if vhs_ok else _missing_tool_hint("vhs", mode))
     )
     checks.append(
         (
             "local-ffmpeg",
             ffmpeg_ok,
-            "ffmpeg found in PATH" if ffmpeg_ok else "ffmpeg not found in PATH",
+            "ffmpeg found in PATH"
+            if ffmpeg_ok
+            else _missing_tool_hint("ffmpeg", mode),
         )
     )
     checks.append(
         (
             "local-ffprobe",
             ffprobe_ok,
-            "ffprobe found in PATH" if ffprobe_ok else "ffprobe not found in PATH",
+            "ffprobe found in PATH"
+            if ffprobe_ok
+            else _missing_tool_hint("ffprobe", mode),
         )
     )
 
@@ -159,7 +175,10 @@ def run_doctor_checks(mode: DoctorMode = "auto") -> list[tuple[str, bool, str]]:
             drawtext_ok,
             "ffmpeg drawtext filter is available"
             if drawtext_ok
-            else "ffmpeg drawtext filter not detected",
+            else (
+                "ffmpeg drawtext filter not detected. "
+                "Labels in composed videos will be disabled until drawtext is available."
+            ),
         )
     )
 

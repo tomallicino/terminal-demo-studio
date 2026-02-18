@@ -4,13 +4,14 @@
 
 ## High-Level Flow
 
-1. CLI accepts `run`, `validate`, `new`, `doctor`.
-2. Screenplay is loaded, normalized, and interpolated (`tmp_dir` injected automatically).
-3. Run path selection:
+1. CLI accepts `run`, `validate`, `new`, `doctor`, and `init`.
+2. `init` creates a starter workspace and screenplay.
+3. Screenplay is loaded, normalized, and interpolated (`tmp_dir` injected automatically).
+4. Run path selection:
 - `scripted_vhs`: compile tape and render via VHS/ffmpeg pipeline.
 - `autonomous_pty`: execute command/assert closed-loop actions and produce run artifacts.
-4. Optional composition step outputs MP4/GIF.
-5. Artifacts are written to output directory and `.terminal_demo_studio_runs/`.
+5. Optional composition step outputs MP4/GIF.
+6. Artifacts are written to output directory and `.terminal_demo_studio_runs/`.
 
 ## Core Modules
 
@@ -19,6 +20,7 @@
 - `terminal_demo_studio/tape.py`: VHS tape compilation, key/hotkey/wait support for scripted lane.
 - `terminal_demo_studio/director.py`: scripted lane render orchestration.
 - `terminal_demo_studio/editor.py`: split-screen composition and GIF export.
+  - Header composition is conditional. If labels cannot be rendered, no header inset is reserved.
 - `terminal_demo_studio/runtime/runner.py`: autonomous command/assert execution and artifact emission.
 - `terminal_demo_studio/runtime/waits.py`: wait/assert timing utilities.
 - `terminal_demo_studio/runtime/shells.py`: cross-platform shell command construction.

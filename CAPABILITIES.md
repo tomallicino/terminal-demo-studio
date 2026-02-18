@@ -114,3 +114,19 @@ Canonical list of implemented capabilities in this repository.
   - `terminal_demo_studio/runtime/runner.py` -> `_unsupported_interactive_reason`, `run_autonomous_screenplay`
 - Evidence:
   - `tests/test_runtime_runner.py::test_autonomous_runner_fails_on_interactive_key_action`
+
+## CAP-STUDIO-015: Workspace Bootstrap (`studio init`)
+- Behavior: Creates plug-and-play workspace directories and scaffolds a starter screenplay template for first-run users/agents.
+- Entry points:
+  - `terminal_demo_studio/cli.py` -> `init`, `_write_screenplay_from_template`
+- Evidence:
+  - `tests/test_cli.py::test_init_creates_starter_workspace`
+  - `tests/test_cli.py::test_init_respects_existing_file_without_force`
+
+## CAP-STUDIO-016: Headerless Composition Fallback
+- Behavior: Avoids blank top bars by disabling header inset/styling when labels are not renderable (no drawtext or no labels).
+- Entry points:
+  - `terminal_demo_studio/editor.py` -> `_resolve_header_mode`, `_build_filter_complex`, `compose_split_screen`
+- Evidence:
+  - `tests/test_editor.py::test_compose_skips_header_when_drawtext_is_unavailable`
+  - `tests/test_editor.py::test_compose_skips_header_when_labels_are_empty`

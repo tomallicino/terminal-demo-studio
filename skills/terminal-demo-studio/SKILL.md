@@ -7,7 +7,7 @@ description: Build deterministic terminal/TUI demos with portable mock defaults 
 
 Create reproducible terminal demo assets that are plug-and-play for agents and users.
 
-## Install
+## Install (Remote-First)
 
 ```bash
 npx skills add tomallicino/terminal-demo-studio --skill terminal-demo-studio
@@ -22,9 +22,9 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 
-studio doctor --mode auto
-studio validate examples/mock/safety_wizard.yaml --explain
-studio run examples/mock/safety_wizard.yaml --mode scripted_vhs --local --output-dir outputs --no-mp4
+studio init
+studio validate screenplays/getting_started.yaml --explain
+studio run screenplays/getting_started.yaml --mode scripted_vhs --local --output-dir outputs --no-mp4
 ```
 
 ## Modes
@@ -36,21 +36,22 @@ studio run examples/mock/safety_wizard.yaml --mode scripted_vhs --local --output
 - closed-loop execution with waits/assertions.
 - writes run artifacts (`events.jsonl`, `summary.json`, and failure bundle on error).
 - command/assert flows are reliable in v1.
-- interactive key/hotkey/input autonomy is not release-complete yet.
+- interactive key/hotkey/input autonomy is specified in `docs/autonomous-roadmap.md` and not release-complete yet.
 
-## Advanced Real-Tool Demos
+## Advanced Real-Tool Lane
 
-Use `examples/real/` for real external-tool sessions.
+Use `examples/real/` for optional advanced external-tool sessions.
 
 Rules:
 
-1. Keep README defaults on portable mocks.
-2. Real vendor-named demos must include a manifest with tool version and capture date.
-3. Use `--mode autonomous_pty` for advanced command/assert runs.
+1. Keep public onboarding and README demos on portable mocks.
+2. Real vendor-named demos must include manifest metadata (tool version and capture date).
+3. Use `--mode autonomous_pty` with explicit waits/assertions.
+4. Treat retries/timeouts as explicit screenplay policy, not hidden runtime behavior.
 
 ## Anti-Flake Checklist
 
 1. Prefer explicit `assert_screen_regex` and `wait_screen_regex` markers.
 2. Keep steps short and stateful; avoid giant command chains.
-3. Use portable mocks for default documentation demos.
+3. Use portable mocks for default docs and screenshots.
 4. Keep advanced real-tool demos isolated and clearly labeled.

@@ -46,16 +46,24 @@ jobs:
 
       - name: Installed-context smoke
         if: runner.os != 'Windows'
+        shell: bash
         run: ./scripts/install_context_smoke.sh
 
       - name: Release preflight
+        if: runner.os != 'Windows'
+        shell: bash
         run: ./scripts/release_preflight.sh
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
 
       - name: Install render dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg ttyd golang-go
+          sudo apt-get install -y ffmpeg ttyd
           go install github.com/charmbracelet/vhs@v0.10.0
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
 
@@ -64,8 +72,40 @@ jobs:
         run: |
           brew install ffmpeg ttyd vhs
 
+      - name: Install render dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install ffmpeg --yes --no-progress
+          go install github.com/charmbracelet/vhs@v0.10.0
+          "$env:USERPROFILE\go\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Probe scripted render prerequisites
+        shell: bash
+        run: |
+          python - <<'PY'
+          import shutil
+          import subprocess
+          import sys
+
+          required = ["vhs", "ffmpeg", "ffprobe"]
+          missing = [name for name in required if shutil.which(name) is None]
+          if missing:
+            raise SystemExit(f"missing required scripted render tools: {', '.join(missing)}")
+
+          probe = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-filters"],
+            capture_output=True,
+            text=True,
+            check=False,
+          )
+          text = f"{probe.stdout}\n{probe.stderr}"
+          if probe.returncode != 0 or "drawtext" not in text:
+            raise SystemExit("ffmpeg drawtext filter unavailable")
+          print("scripted render prerequisites ready")
+          PY
+
       - name: Portable mock render smoke
-        if: runner.os != 'Windows'
         run: |
           python -m terminal_demo_studio.cli run examples/mock/safety_wizard.yaml --mode scripted_vhs --local --output-dir outputs --no-mp4
 

@@ -9,6 +9,7 @@ from typing import Literal
 CommandRunner = Callable[[list[str], bool], None]
 DurationProbe = Callable[[Path], float]
 PlaybackMode = Literal["sequential", "simultaneous"]
+HeaderMode = Literal["auto", "always", "never"]
 
 TARGET_HEIGHT = 840
 FRAME_RATE = 30
@@ -34,7 +35,8 @@ def _detect_drawtext_support() -> bool:
         capture_output=True,
         text=True,
     )
-    return "drawtext" in probe.stdout
+    combined = f"{probe.stdout}\n{probe.stderr}"
+    return probe.returncode == 0 and "drawtext" in combined
 
 
 def _probe_duration(video: Path) -> float:
@@ -93,99 +95,126 @@ def _escape_filter_path(path: Path) -> str:
     return str(path).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
 
 
-def compose_split_screen(
-    inputs: list[Path],
-    labels: list[str],
-    output_mp4: Path,
-    output_gif: Path,
-    run_cmd: CommandRunner = _default_run,
-    supports_drawtext: bool | None = None,
-    playback_mode: PlaybackMode = "sequential",
-    probe_duration: DurationProbe = _probe_duration,
-) -> None:
-    if len(inputs) < 1:
-        raise ValueError("At least one input video is required for output")
-    if playback_mode not in {"sequential", "simultaneous"}:
-        raise ValueError(f"Unsupported playback mode: {playback_mode}")
+def _normalize_labels(labels: list[str], input_count: int) -> list[str]:
+    if not labels:
+        return []
 
-    normalized_labels = labels[:]
-    if len(normalized_labels) < len(inputs):
-        normalized_labels.extend(
+    normalized = labels[:]
+    if len(normalized) < input_count:
+        normalized.extend(
             [
                 f"Scenario {index + 1}"
-                for index in range(len(normalized_labels), len(inputs))
+                for index in range(len(normalized), input_count)
             ]
         )
+    return normalized[:input_count]
 
-    if supports_drawtext is None:
-        supports_drawtext = _detect_drawtext_support()
 
-    durations = [probe_duration(video) for video in inputs]
-    offsets = _timeline_offsets(durations, playback_mode)
-    total_duration = max(
-        offsets[index] + durations[index] for index in range(len(inputs))
+def _resolve_header_mode(
+    *,
+    requested: HeaderMode,
+    supports_drawtext: bool,
+    labels: list[str],
+) -> HeaderMode:
+    if requested == "never":
+        return "never"
+    if requested == "always":
+        if supports_drawtext and any(label.strip() for label in labels):
+            return "always"
+        return "never"
+    if supports_drawtext and any(label.strip() for label in labels):
+        return "always"
+    return "never"
+
+
+def _build_input_filters(
+    *,
+    input_count: int,
+    durations: list[float],
+    offsets: list[float],
+    total_duration: float,
+) -> list[str]:
+    filters: list[str] = []
+    for index in range(input_count):
+        start_duration = offsets[index]
+        stop_duration = max(
+            total_duration - (offsets[index] + durations[index]),
+            0.0,
+        )
+        filters.append(
+            f"[{index}:v]"
+            f"fps={FRAME_RATE},"
+            f"scale=-2:{TARGET_HEIGHT}:flags=lanczos,"
+            "format=yuv420p,"
+            f"tpad=start_mode=clone:start_duration={start_duration:.3f}:"
+            f"stop_mode=clone:stop_duration={stop_duration:.3f}"
+            f"[v{index}]"
+        )
+    return filters
+
+
+def _build_stacked_filter(*, input_count: int, pane_top: int, header_inset: int) -> str:
+    if input_count == 1:
+        return (
+            "[v0]"
+            f"pad=w=iw+{2 * CANVAS_MARGIN}:"
+            f"h=ih+{2 * CANVAS_MARGIN + header_inset}:"
+            f"x={CANVAS_MARGIN}:"
+            f"y={pane_top}:"
+            f"color={BACKGROUND_COLOR}"
+            "[stacked]"
+        )
+
+    stack_inputs = "".join(f"[v{index}]" for index in range(input_count))
+    layout = "|".join(
+        f"{_pane_x_expr(index, CANVAS_MARGIN, PANE_GAP)}_{pane_top}"
+        for index in range(input_count)
+    )
+    return (
+        f"{stack_inputs}"
+        f"xstack=inputs={input_count}:layout={layout}:fill={BACKGROUND_COLOR}"
+        "[stacked]"
     )
 
-    pane_top = CANVAS_MARGIN + HEADER_HEIGHT
 
-    with tempfile.TemporaryDirectory(prefix="terminal-demo-studio-labels-") as tmpdir:
-        label_paths: list[Path] = []
-        for index, label in enumerate(normalized_labels[: len(inputs)]):
-            label_file = Path(tmpdir) / f"label_{index}.txt"
-            label_file.write_text(label, encoding="utf-8")
-            label_paths.append(label_file)
+def _build_filter_complex(
+    *,
+    input_count: int,
+    labels: list[str],
+    label_paths: list[Path],
+    durations: list[float],
+    offsets: list[float],
+    total_duration: float,
+    header_mode: HeaderMode,
+) -> str:
+    draw_header = header_mode == "always"
+    pane_top = CANVAS_MARGIN + (HEADER_HEIGHT if draw_header else 0)
+    input_filters = _build_input_filters(
+        input_count=input_count,
+        durations=durations,
+        offsets=offsets,
+        total_duration=total_duration,
+    )
+    stacked = _build_stacked_filter(
+        input_count=input_count,
+        pane_top=pane_top,
+        header_inset=HEADER_HEIGHT if draw_header else 0,
+    )
+    filter_parts = [*input_filters, stacked]
 
-        input_filters: list[str] = []
-        for index in range(len(inputs)):
-            start_duration = offsets[index]
-            stop_duration = max(
-                total_duration - (offsets[index] + durations[index]),
-                0.0,
-            )
-            input_filters.append(
-                f"[{index}:v]"
-                f"fps={FRAME_RATE},"
-                f"scale=-2:{TARGET_HEIGHT}:flags=lanczos,"
-                "format=yuv420p,"
-                f"tpad=start_mode=clone:start_duration={start_duration:.3f}:"
-                f"stop_mode=clone:stop_duration={stop_duration:.3f}"
-                f"[v{index}]"
-            )
-
-        if len(inputs) == 1:
-            stacked = (
-                f"[v0]"
-                f"pad=w=iw+{2 * CANVAS_MARGIN}:"
-                f"h=ih+{2 * CANVAS_MARGIN + HEADER_HEIGHT}:"
-                f"x={CANVAS_MARGIN}:"
-                f"y={pane_top}:"
-                f"color={BACKGROUND_COLOR}"
-                "[stacked]"
-            )
-        else:
-            stack_inputs = "".join(f"[v{index}]" for index in range(len(inputs)))
-            layout = "|".join(
-                f"{_pane_x_expr(index, CANVAS_MARGIN, PANE_GAP)}_{pane_top}"
-                for index in range(len(inputs))
-            )
-            stacked = (
-                f"{stack_inputs}"
-                f"xstack=inputs={len(inputs)}:layout={layout}:fill={BACKGROUND_COLOR}"
-                "[stacked]"
-            )
-
+    draw_labels = draw_header and bool(labels)
+    if draw_header:
         style_chain = (
             "[stacked]"
             f"drawbox=x=0:y=0:w=iw:h={pane_top}:color={HEADER_COLOR}:t=fill,"
             f"drawbox=x=0:y={pane_top-2}:w=iw:h=2:color={HEADER_RULE_COLOR}:t=fill"
             "[styled]"
         )
-
-        filter_parts = [*input_filters, stacked, style_chain]
-        if supports_drawtext:
+        filter_parts.append(style_chain)
+        if draw_labels:
             draw_parts: list[str] = []
             pane_width_expr = (
-                f"(w-{2 * CANVAS_MARGIN}-{(len(inputs) - 1) * PANE_GAP})/{len(inputs)}"
+                f"(w-{2 * CANVAS_MARGIN}-{(input_count - 1) * PANE_GAP})/{input_count}"
             )
             for index, label_path in enumerate(label_paths):
                 x_expr = (
@@ -205,8 +234,60 @@ def compose_split_screen(
             filter_parts.append(f"[styled]{','.join(draw_parts)}[outv]")
         else:
             filter_parts.append("[styled]copy[outv]")
+    else:
+        filter_parts.append("[stacked]copy[outv]")
 
-        filter_complex = ";".join(filter_parts)
+    return ";".join(filter_parts)
+
+
+def compose_split_screen(
+    inputs: list[Path],
+    labels: list[str],
+    output_mp4: Path,
+    output_gif: Path,
+    run_cmd: CommandRunner = _default_run,
+    supports_drawtext: bool | None = None,
+    playback_mode: PlaybackMode = "sequential",
+    probe_duration: DurationProbe = _probe_duration,
+    header_mode: HeaderMode = "auto",
+) -> None:
+    if len(inputs) < 1:
+        raise ValueError("At least one input video is required for output")
+    if playback_mode not in {"sequential", "simultaneous"}:
+        raise ValueError(f"Unsupported playback mode: {playback_mode}")
+    if header_mode not in {"auto", "always", "never"}:
+        raise ValueError(f"Unsupported header mode: {header_mode}")
+
+    if supports_drawtext is None:
+        supports_drawtext = _detect_drawtext_support()
+    normalized_labels = _normalize_labels(labels, len(inputs))
+    resolved_header_mode = _resolve_header_mode(
+        requested=header_mode,
+        supports_drawtext=supports_drawtext,
+        labels=normalized_labels,
+    )
+
+    durations = [probe_duration(video) for video in inputs]
+    offsets = _timeline_offsets(durations, playback_mode)
+    total_duration = max(
+        offsets[index] + durations[index] for index in range(len(inputs))
+    )
+
+    with tempfile.TemporaryDirectory(prefix="terminal-demo-studio-labels-") as tmpdir:
+        label_paths: list[Path] = []
+        for index, label in enumerate(normalized_labels):
+            label_file = Path(tmpdir) / f"label_{index}.txt"
+            label_file.write_text(label, encoding="utf-8")
+            label_paths.append(label_file)
+        filter_complex = _build_filter_complex(
+            input_count=len(inputs),
+            labels=normalized_labels,
+            label_paths=label_paths,
+            durations=durations,
+            offsets=offsets,
+            total_duration=total_duration,
+            header_mode=resolved_header_mode,
+        )
 
         mp4_cmd: list[str] = ["ffmpeg", "-y"]
         for video in inputs:
