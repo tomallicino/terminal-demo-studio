@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -213,10 +214,10 @@ def test_rewrite_summary_paths_maps_workspace_prefix(tmp_path: Path) -> None:
     )
 
     docker_runner._rewrite_summary_paths(summary, tmp_path)
-    rewritten = summary.read_text(encoding="utf-8")
+    rewritten = json.loads(summary.read_text(encoding="utf-8"))
 
-    assert f'"events": "{(tmp_path / "out/events.jsonl").resolve()}"' in rewritten
-    assert f'"mp4": "{(tmp_path / "out/demo.mp4").resolve()}"' in rewritten
+    assert rewritten["events"] == str((tmp_path / "out/events.jsonl").resolve())
+    assert rewritten["media"]["mp4"] == str((tmp_path / "out/demo.mp4").resolve())
 
 
 def test_rewrite_summary_paths_maps_windows_style_workspace_prefix(tmp_path: Path) -> None:
@@ -228,10 +229,10 @@ def test_rewrite_summary_paths_maps_windows_style_workspace_prefix(tmp_path: Pat
     )
 
     docker_runner._rewrite_summary_paths(summary, tmp_path)
-    rewritten = summary.read_text(encoding="utf-8")
+    rewritten = json.loads(summary.read_text(encoding="utf-8"))
 
-    assert f'"events": "{(tmp_path / "out/events.jsonl").resolve()}"' in rewritten
-    assert f'"mp4": "{(tmp_path / "out/demo.mp4").resolve()}"' in rewritten
+    assert rewritten["events"] == str((tmp_path / "out/events.jsonl").resolve())
+    assert rewritten["media"]["mp4"] == str((tmp_path / "out/demo.mp4").resolve())
 
 
 def test_run_in_docker_forwards_openai_env_vars(monkeypatch: object) -> None:
