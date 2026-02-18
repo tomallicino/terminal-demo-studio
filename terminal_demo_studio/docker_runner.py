@@ -241,7 +241,7 @@ def compute_image_tag(project_root: Path) -> str:
     studio_root = project_root
     files_to_hash: list[Path] = []
 
-    for filename in ["Dockerfile", "requirements.txt", "pyproject.toml"]:
+    for filename in ["Dockerfile", "pyproject.toml"]:
         target = studio_root / filename
         if target.exists():
             files_to_hash.append(target)
@@ -366,6 +366,10 @@ def run_in_docker(
         cmd.extend(["-e", "OPENAI_BASE_URL"])
     if os.environ.get("OPENAI_ORGANIZATION"):
         cmd.extend(["-e", "OPENAI_ORGANIZATION"])
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        cmd.extend(["-e", "ANTHROPIC_API_KEY"])
+    if os.environ.get("ANTHROPIC_BASE_URL"):
+        cmd.extend(["-e", "ANTHROPIC_BASE_URL"])
     cmd.extend(
         [
             image_tag,

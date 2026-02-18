@@ -12,7 +12,7 @@ from terminal_demo_studio.docker_runner import compute_image_tag
 
 def test_compute_image_tag_is_stable_for_same_inputs(tmp_path: Path) -> None:
     (tmp_path / "Dockerfile").write_text("FROM alpine:3.20\n", encoding="utf-8")
-    (tmp_path / "requirements.txt").write_text("PyYAML==6.0.3\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
     assets = tmp_path / "assets"
     assets.mkdir()
     (assets / "starship.toml").write_text("add_newline = false\n", encoding="utf-8")
@@ -26,7 +26,6 @@ def test_compute_image_tag_is_stable_for_same_inputs(tmp_path: Path) -> None:
 
 def test_compute_image_tag_changes_when_package_code_changes(tmp_path: Path) -> None:
     (tmp_path / "Dockerfile").write_text("FROM alpine:3.20\n", encoding="utf-8")
-    (tmp_path / "requirements.txt").write_text("PyYAML==6.0.3\n", encoding="utf-8")
     (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
     package_dir = tmp_path / "terminal_demo_studio"
     package_dir.mkdir()

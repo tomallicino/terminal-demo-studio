@@ -1,0 +1,82 @@
+title: "Bugfix Glow (Catppuccin)"
+output: "showcase_bugfix_catppuccin_glow"
+variables:
+  demo_dir: "{{tmp_dir}}/tds_showcase_bugfix_catppuccin"
+settings:
+  width: 1680
+  height: 960
+  font_size: 22
+  font_family: "Monaco"
+  theme: "Catppuccin Mocha"
+  padding: 26
+  margin: 14
+  margin_fill: "#1E1E2E"
+  border_radius: 16
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.2
+  letter_spacing: 0
+preinstall:
+  - "rm -rf {{demo_dir}} && mkdir -p {{demo_dir}}"
+  - |
+    cat > {{demo_dir}}/mathlib.py <<'PY'
+    def add(a, b):
+        return a + b
+    PY
+  - |
+    cat > {{demo_dir}}/test_mathlib.py <<'PY'
+    import unittest
+    from mathlib import add
+
+    class AddTests(unittest.TestCase):
+        def test_add(self):
+            self.assertEqual(add(2, 3), 5)
+
+    if __name__ == "__main__":
+        unittest.main()
+    PY
+  - |
+    cat > {{demo_dir}}/mathlib.before.py <<'PY'
+    def add(a, b):
+        return a - b
+    PY
+  - "cp {{demo_dir}}/mathlib.py {{demo_dir}}/mathlib.after.py"
+scenarios:
+  - label: "Regression"
+    surface: "terminal"
+    prompt:
+      style: "venv"
+      env: ".venv"
+      user: "dev"
+      host: "workstation"
+      path: "basename"
+      symbol: "$"
+    setup:
+      - "cd {{demo_dir}}"
+      - "cp mathlib.before.py mathlib.py"
+      - "clear"
+    actions:
+      - type: "python3 -m unittest -q"
+      - wait_for: "FAILED"
+        wait_mode: "screen"
+        wait_timeout: "8s"
+      - sleep: "900ms"
+  - label: "Fix Verified"
+    surface: "terminal"
+    prompt:
+      style: "venv"
+      env: ".venv"
+      user: "dev"
+      host: "workstation"
+      path: "basename"
+      symbol: "$"
+    setup:
+      - "cd {{demo_dir}}"
+      - "cp mathlib.after.py mathlib.py"
+      - "clear"
+    actions:
+      - type: "python3 -m unittest -q"
+      - wait_for: "OK"
+        wait_mode: "screen"
+        wait_timeout: "8s"
+      - sleep: "900ms"

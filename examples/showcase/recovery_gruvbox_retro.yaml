@@ -1,0 +1,66 @@
+title: "Recovery Retro (Gruvbox)"
+output: "showcase_recovery_gruvbox_retro"
+variables:
+  demo_dir: "{{tmp_dir}}/tds_showcase_recovery_gruvbox"
+settings:
+  width: 1460
+  height: 880
+  font_size: 23
+  font_family: "Courier New"
+  theme: "GruvboxDark"
+  padding: 24
+  margin: 14
+  margin_fill: "#282828"
+  border_radius: 18
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.14
+  letter_spacing: 0
+preinstall:
+  - "rm -rf {{demo_dir}} && mkdir -p {{demo_dir}}"
+  - |
+    cat > {{demo_dir}}/app.py <<'PY'
+    import json
+    import sys
+    from pathlib import Path
+
+    config = json.loads(Path("config.json").read_text())
+    timeout = config["timeout"]
+    if timeout <= 0:
+        print("error: timeout must be > 0")
+        sys.exit(1)
+    print(f"starting service with timeout={timeout}")
+    PY
+  - |
+    cat > {{demo_dir}}/config.bad.json <<'JSON'
+    {"timeout": 0}
+    JSON
+  - |
+    cat > {{demo_dir}}/config.good.json <<'JSON'
+    {"timeout": 15}
+    JSON
+scenarios:
+  - label: "Broken Timeout"
+    surface: "terminal"
+    setup:
+      - "cd {{demo_dir}}"
+      - "cp config.bad.json config.json"
+      - "clear"
+    actions:
+      - type: "python3 app.py"
+      - wait_for: "error: timeout must be > 0"
+        wait_mode: "screen"
+        wait_timeout: "6s"
+      - sleep: "900ms"
+  - label: "Recovered Timeout"
+    surface: "terminal"
+    setup:
+      - "cd {{demo_dir}}"
+      - "cp config.good.json config.json"
+      - "clear"
+    actions:
+      - type: "python3 app.py"
+      - wait_for: "starting service with timeout=15"
+        wait_mode: "screen"
+        wait_timeout: "6s"
+      - sleep: "900ms"

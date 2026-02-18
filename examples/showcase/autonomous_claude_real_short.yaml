@@ -1,0 +1,27 @@
+title: "Autonomous Video Real Claude TUI Onboarding"
+output: "showcase_autonomous_claude_real_tui"
+settings:
+  width: 1440
+  height: 900
+  theme: "TokyoNightStorm"
+  framerate: 30
+scenarios:
+  - label: "Claude TUI OAuth Flow"
+    execution_mode: "autonomous_video"
+    setup:
+      - "command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code@2.1.39 >/dev/null 2>&1"
+    actions:
+      - command: "claude"
+      - wait_screen_regex: "Choose the text style|Select login method"
+      - key: "Enter"
+      - sleep: "1200ms"
+      - wait_screen_regex: "Select login method|Claude account with subscription|Anthropic Console account|3rd-party platform"
+      - key: "Down"
+      - key: "Enter"
+      - wait_screen_regex: "Browser didn't open|Paste code here if prompted|oauth/authorize"
+      - key: "c"
+      - sleep: "800ms"
+      - input: "demo-code"
+      - key: "Enter"
+      - wait_screen_regex: "Paste code here|Invalid|authorization|code"
+      - sleep: "1200ms"

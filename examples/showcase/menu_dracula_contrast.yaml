@@ -1,0 +1,33 @@
+title: "Menu Contrast (Dracula)"
+output: "showcase_menu_dracula_contrast"
+settings:
+  width: 1380
+  height: 860
+  font_size: 24
+  font_family: "Courier"
+  theme: "Dracula"
+  padding: 26
+  margin: 16
+  margin_fill: "#1B1330"
+  border_radius: 20
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.1
+  letter_spacing: 1
+scenarios:
+  - label: "Command Center"
+    surface: "terminal"
+    actions:
+      - type: "echo 'Command Center'"
+      - type: "echo ' > Validate screenplay'"
+      - type: "echo '   Render storyboard'"
+      - type: "echo '   Publish artifact'"
+      - key: "Down"
+      - key: "Down"
+      - type: "echo ' > Publish artifact'"
+      - key: "Enter"
+      - type: "echo 'artifact uploaded: docs/media/showcase_menu_dracula_contrast.mp4'"
+      - wait_for: "artifact uploaded"
+        wait_mode: "screen"
+        wait_timeout: "6s"
+      - sleep: "900ms"

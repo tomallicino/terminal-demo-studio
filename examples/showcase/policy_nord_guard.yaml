@@ -1,0 +1,73 @@
+title: "Policy Guard (Nord)"
+output: "showcase_policy_nord_guard"
+variables:
+  demo_dir: "{{tmp_dir}}/tds_showcase_policy_nord"
+settings:
+  width: 1640
+  height: 940
+  font_size: 22
+  font_family: "SF Mono"
+  theme: "nord"
+  padding: 24
+  margin: 14
+  margin_fill: "#2E3440"
+  border_radius: 12
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.16
+  letter_spacing: 0
+preinstall:
+  - "rm -rf {{demo_dir}} && mkdir -p {{demo_dir}}"
+  - |
+    cat > {{demo_dir}}/policy_check.py <<'PY'
+    import json
+    import sys
+    from pathlib import Path
+
+    candidate = json.loads(Path(sys.argv[1]).read_text())
+    allowed = {"MIT", "BSD-3-Clause", "Apache-2.0"}
+    blocked = sorted(set(candidate["licenses"]) - allowed)
+    if blocked:
+        print("policy: BLOCKED")
+        print(f"blocked_licenses={','.join(blocked)}")
+        sys.exit(1)
+    print("policy: PASS")
+    print("blocked_licenses=<none>")
+    PY
+  - |
+    cat > {{demo_dir}}/candidate.non_compliant.json <<'JSON'
+    {"name":"candidate-a","licenses":["MIT","GPL-3.0"]}
+    JSON
+  - |
+    cat > {{demo_dir}}/candidate.compliant.json <<'JSON'
+    {"name":"candidate-b","licenses":["MIT","Apache-2.0"]}
+    JSON
+scenarios:
+  - label: "Blocked Package"
+    surface: "terminal"
+    setup:
+      - "cd {{demo_dir}}"
+      - "clear"
+    actions:
+      - type: "python3 policy_check.py candidate.non_compliant.json"
+      - wait_for: "policy: BLOCKED"
+        wait_mode: "screen"
+        wait_timeout: "8s"
+      - wait_for: "blocked_licenses=GPL-3.0"
+        wait_mode: "screen"
+        wait_timeout: "8s"
+      - sleep: "900ms"
+  - label: "Approved Package"
+    surface: "terminal"
+    setup:
+      - "cd {{demo_dir}}"
+      - "clear"
+    actions:
+      - type: "python3 policy_check.py candidate.compliant.json"
+      - wait_for: "policy: PASS"
+        wait_mode: "screen"
+        wait_timeout: "8s"
+      - wait_for: "blocked_licenses=<none>"
+        wait_mode: "screen"
+        wait_timeout: "8s"
+      - sleep: "900ms"

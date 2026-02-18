@@ -1,94 +1,89 @@
 # Architecture
 
-`terminal-demo-studio` has three execution lanes (scripted, interactive, visual) with one shared artifact contract.
+`terminal-demo-studio` is a deterministic rendering pipeline with three execution lanes and one shared artifact contract.
 
-## High-Level Flow
+## System view
 
-1. `tds` receives command (`render`, `run`, `new`, `init`, `validate`, `lint`, `doctor`, `debug`).
-2. Screenplay is loaded and validated (`models.py`) with variable interpolation.
-3. Lane selection is resolved from `--mode` aliases or screenplay scenarios.
-4. Canonical run layout is created (`artifacts.py`).
-5. Lane execution runs and emits media/events/summary/failure artifacts.
-6. CLI prints machine-friendly keys (`STATUS`, `RUN_DIR`, `MEDIA_*`, `SUMMARY`, `EVENTS`).
+1. `tds` parses command + options (`render`, `run`, `validate`, `lint`, `new`, `init`, `doctor`, `debug`).
+2. Screenplay YAML is loaded and validated (`models.py`), including variable interpolation.
+3. Lane resolution chooses `scripted_vhs`, `autonomous_pty`, or `autonomous_video`.
+4. A canonical run layout is created (`artifacts.py`).
+5. Lane runtime executes and writes media/events/summaries.
+6. CLI emits machine-readable result keys (`STATUS`, `RUN_DIR`, `MEDIA_*`, `SUMMARY`, `EVENTS`).
 
-## Core Modules
+## Lane architecture
 
-- `terminal_demo_studio/cli.py`
-  - command routing, mode policy, local/docker fallback handling.
-- `terminal_demo_studio/models.py`
-  - screenplay schema, validation, interpolation.
-- `terminal_demo_studio/resources.py`
-  - packaged template discovery/loading.
-- `terminal_demo_studio/artifacts.py`
-  - run directory layout + manifest/summary writers.
-- `terminal_demo_studio/tape.py`
-  - VHS tape compiler.
-- `terminal_demo_studio/director.py`
-  - scripted VHS lane orchestration.
-- `terminal_demo_studio/editor.py`
-  - split-screen composition + GIF output + label rendering fallback.
-- `terminal_demo_studio/runtime/runner.py`
-  - `autonomous_pty` command/assert runtime.
-- `terminal_demo_studio/runtime/video_runner.py`
-  - `autonomous_video` runtime for interactive capture (experimental).
-- `terminal_demo_studio/linting.py`
-  - screenplay linting (`tds lint`) for policy and action compatibility checks.
-- `terminal_demo_studio/prompt_policy.py`
-  - shared prompt-loop policy merge + lint logic.
-- `terminal_demo_studio/redaction.py`
-  - media redaction mode resolution (`auto|off|input_line`) and sensitivity heuristics.
-- `terminal_demo_studio/runtime/shells.py`
-  - cross-platform shell launcher logic.
-- `terminal_demo_studio/doctor.py`
-  - mode-aware diagnostics with actionable `NEXT:` guidance.
-- `terminal_demo_studio/docker_runner.py`
-  - optional dockerized execution with hashed image reuse + stale-tag retention pruning.
+## `scripted_vhs` (stable)
 
-## Execution Lanes
+- Screenplay actions are compiled into VHS tape directives (`tape.py`).
+- Scene videos are rendered and stitched into final compositions (`director.py`, `editor.py`).
+- Split-screen composition supports sequential or simultaneous playback.
+- Label rendering uses FFmpeg drawtext when available, with Pillow image-overlay fallback.
 
-### Scripted (`scripted_vhs`, stable)
+## `autonomous_pty` (stable command/assert lane)
 
-- Deterministic playback from compiled tapes.
-- Supports composed multi-pane outputs and showcase-friendly GIF/MP4 assets.
+- Executes setup + command actions in PTY-like shell flow (`runtime/runner.py`).
+- Supports waits/assertions (`wait_for`, regex waits/assertions, `expect_exit_code`).
+- Rejects interactive primitives (`input`, `key`, `hotkey`) with explicit failure reasons.
+- Writes runtime events (`runtime/events.jsonl`) and failure bundles.
 
-### Interactive (`autonomous_pty`, stable command/assert scope)
+## `autonomous_video` (experimental)
 
-- Closed-loop setup/command execution with wait/assert checks.
-- Writes runtime events and failure bundles.
-- Interactive primitives (`input`/`key`/`hotkey`) are currently guarded.
+- Runs full-screen terminal UI capture (`runtime/video_runner.py`).
+- Supports `command`, `input`, `key`, `hotkey`, waits/assertions, and prompt-loop policies.
+- Applies policy linting and optional command-prefix allowlisting before automated approvals.
+- Supports media redaction modes (`auto`, `off`, `input_line`) and value-redacted failure bundles.
+- Chooses local runtime when dependencies exist, otherwise falls back to Docker (auto mode).
 
-### Visual (`autonomous_video`, experimental)
+## Core components
 
-- Interactive full-screen capture lane via Kitty + virtual display stack.
-- Intended for complex TUI-style automation with visual output capture.
-- Supports `agent_prompts` policies (`manual`, `approve`, `deny`) for bounded prompt loops.
-- Applies pre-execution policy linting for approve mode safety.
-- Enforces optional `allowed_command_prefixes` before automated approval.
-- Composes final media with optional input-line redaction masking.
-- Not promoted as stable in README quickstart.
+- `terminal_demo_studio/cli.py`: command routing, mode normalization, render orchestration.
+- `terminal_demo_studio/models.py`: screenplay schema + validation.
+- `terminal_demo_studio/interpolate.py`: variable interpolation.
+- `terminal_demo_studio/resources.py`: packaged template discovery and loading.
+- `terminal_demo_studio/linting.py`: static screenplay checks.
+- `terminal_demo_studio/prompt_policy.py`: merge + lint for agent prompt policies.
+- `terminal_demo_studio/redaction.py`: media redaction mode resolution.
+- `terminal_demo_studio/doctor.py`: dependency and runtime diagnostics.
+- `terminal_demo_studio/docker_runner.py`: Docker execution, image lifecycle, hardening knobs.
 
-## Canonical Run Artifact Layout
+## Artifact contract
 
-For all lanes:
+Every run writes a canonical directory:
 
-- `run_dir/manifest.json`
-- `run_dir/summary.json`
-- `run_dir/media/*.gif|*.mp4`
-- `run_dir/scenes/scene_*.mp4` (scripted lane)
-- `run_dir/tapes/scene_*.tape` (scripted lane)
-- `run_dir/runtime/events.jsonl` (autonomous lanes)
-- `run_dir/failure/*` on failure
+- `manifest.json`
+- `summary.json`
+- `media/*.gif|*.mp4`
+- `scenes/scene_*.mp4` and `tapes/scene_*.tape` (scripted lane)
+- `runtime/events.jsonl` (autonomous lanes)
+- `failure/*` on failure
 
-## Debug Flow
+The contract is intentionally lane-agnostic so CI jobs and agents can parse results uniformly.
 
-- `tds render/run` prints machine-readable paths.
-- `tds debug <run_dir>` provides compact operator summary.
-- `tds debug <run_dir> --json` emits stable JSON for agent workflows.
+## Runtime selection policy
 
-## Distribution Surface
+For `--mode auto`:
 
-- Python package: `terminal_demo_studio`
-- PyPI distribution: `terminal-demo-studio`
+- If screenplay contains any `autonomous_video` scenario, run `autonomous_video`.
+- Else if screenplay contains any `autonomous_pty` scenario, run `autonomous_pty`.
+- Else run `scripted_vhs`.
+
+Runtime location behavior:
+
+- `--local`: strict local execution.
+- `--docker`: strict Docker execution when supported.
+- default/auto: lane-aware fallback (`scripted_vhs` and `autonomous_video` can use Docker fallback; `autonomous_pty` remains local).
+
+## Operational interfaces
+
+- `tds doctor`: mode-aware dependency checks with `NEXT:` remediation hints.
+- `tds lint`: static guardrail checks without running demos.
+- `tds debug`: compact or JSON triage output from run summaries.
+
+## Packaging and distribution
+
+- Package name: `terminal-demo-studio`
+- Python module: `terminal_demo_studio`
 - CLI binary: `tds`
-- Skill: `skills/terminal-demo-studio/SKILL.md`
-- Reusable GitHub Action: `.github/actions/render`
+- Skill entrypoint: `skills/terminal-demo-studio/SKILL.md`
+- Reusable CI action: `.github/actions/render/action.yml`

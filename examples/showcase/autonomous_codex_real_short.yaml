@@ -1,0 +1,36 @@
+title: "Autonomous Video Real Codex TUI Hello App"
+output: "showcase_autonomous_codex_real_tui"
+settings:
+  width: 1440
+  height: 900
+  theme: "GruvboxDark"
+  framerate: 30
+scenarios:
+  - label: "Codex TUI Builds Hello App"
+    execution_mode: "autonomous_video"
+    agent_prompts:
+      mode: "approve"
+      prompt_regex: "Press enter to confirm or esc to cancel"
+      allow_regex: "showcase_codex_hello|README\\.md|main\\.py|sha256sum|mkdir|printf|cat|python3|echo|touch|grep|test"
+      allowed_command_prefixes:
+        - "mkdir "
+        - "cat "
+        - "grep "
+        - "python3 "
+        - "printf "
+        - "echo "
+        - "touch "
+        - "test "
+      max_rounds: 8
+    setup:
+      - "if [ -n \"${OPENAI_API_KEY:-}\" ]; then printf \"%s\" \"$OPENAI_API_KEY\" | codex login --with-api-key >/dev/null 2>&1 || true; fi"
+      - "rm -rf /workspace/examples/showcase/runtime/showcase_codex_hello"
+    actions:
+      - command: "codex -a on-request -s workspace-write"
+      - sleep: "2s"
+      - input: "Run exactly these shell commands and then reply with only TDS_CODEX_SHOWCASE_DONE: mkdir -p /workspace/examples/showcase/runtime/showcase_codex_hello && printf 'print(\"Hello from Codex TUI showcase.\")\\n' > /workspace/examples/showcase/runtime/showcase_codex_hello/main.py && printf '# Codex TUI Showcase\\n\\nRun:\\npython3 main.py\\n' > /workspace/examples/showcase/runtime/showcase_codex_hello/README.md && python3 /workspace/examples/showcase/runtime/showcase_codex_hello/main.py"
+      - key: "enter"
+      - wait_for: "TDS_CODEX_SHOWCASE_DONE"
+        wait_mode: "line"
+        wait_timeout: "150s"
+      - sleep: "1s"

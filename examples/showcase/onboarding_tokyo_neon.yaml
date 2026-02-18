@@ -1,0 +1,24 @@
+title: "Onboarding Neon Night"
+output: "showcase_onboarding_tokyo_neon"
+settings:
+  width: 1320
+  height: 820
+  font_size: 21
+  font_family: "Menlo"
+  theme: "TokyoNightStorm"
+  padding: 24
+  margin: 16
+  margin_fill: "#020617"
+  border_radius: 14
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+scenarios:
+  - label: "Install + First Render"
+    surface: "terminal"
+    actions:
+      - type: "pip install terminal-demo-studio"
+      - type: "tds init --destination /tmp/tds_onboarding_workspace"
+      - input: "tds render --template install_first_command --output gif --output-dir outputs"
+      - sleep: "900ms"

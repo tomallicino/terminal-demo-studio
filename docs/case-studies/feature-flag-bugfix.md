@@ -1,32 +1,31 @@
-# Case Study: Feature Flag Bugfix Demo
+# Case Study: Feature-Flag Bugfix
+
+This case study demonstrates a deterministic before/after debugging narrative that is suitable for release notes and README media.
 
 ## Goal
 
-Show a clear before/after workflow where a failing feature-flag test is diagnosed and fixed in a deterministic terminal demo.
+Show one failing path and one fixed path with explicit visual proof in terminal output.
 
-## Source Screenplay
+## Screenplay
 
 - `screenplays/agent_generated_feature_flag_fix.yaml`
 
-## Workflow
-
-1. Validate screenplay structure and wait targets.
-2. Render in local scripted mode with deterministic preinstall setup.
-3. Inspect generated media and debug summary for narrative clarity.
-
-## Command Set
+## Runbook
 
 ```bash
 tds validate screenplays/agent_generated_feature_flag_fix.yaml --explain
-tds render screenplays/agent_generated_feature_flag_fix.yaml --mode scripted_vhs --local --output-dir outputs
+tds lint screenplays/agent_generated_feature_flag_fix.yaml
+tds render screenplays/agent_generated_feature_flag_fix.yaml --mode scripted_vhs --local --output gif --output mp4 --output-dir outputs
 ```
 
-## Key Scene Design
+## Why this works
 
-- **Before Fix**: `checkout_v2` is disabled and test assertion fails.
-- **After Fix**: flag is enabled and the same test passes with `OK`.
-- Wait checkpoints are pinned to stable lines (`FAIL:` and `OK`) for resilient playback timing.
+- Uses deterministic preinstall setup for controlled input state.
+- Uses explicit wait anchors for both failure and success states.
+- Produces side-by-side narrative that is easy to review frame-by-frame.
 
-## Result
+## Success signals
 
-Deterministic side-by-side demo suitable for README and launch artifacts.
+- Scenario A contains failure markers (for example `FAIL` or explicit blocked state).
+- Scenario B contains success markers (`OK`, pass, or equivalent release-ready state).
+- `summary.json` reports `status: success` and includes media paths.

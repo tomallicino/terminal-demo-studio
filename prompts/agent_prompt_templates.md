@@ -1,103 +1,96 @@
-# Agent Prompt Templates (Copy/Paste)
+# Agent Prompt Templates
 
-## 1) Fast Valid Screenplay Generator
-Use this when you need a brand new demo screenplay quickly.
+Copy/paste prompts for generating valid screenplay YAML for `tds`.
+
+## 1) Fast valid screenplay generator
 
 ```text
-You are generating a screenplay YAML for this repo's `studio validate` command.
+Generate a valid screenplay YAML for terminal-demo-studio.
 
-Return ONLY raw YAML. No markdown fences. No explanation.
+Return only raw YAML. No markdown fences.
 
-Hard schema rules (must satisfy all):
-- Top-level keys: `title`, `output`, `settings`, `scenarios`.
-- Optional keys: `variables`, `preinstall`.
-- `scenarios` must contain at least 2 items.
-- Each scenario must include: `label`, `surface`, `setup`, `actions`.
-- `surface` must be exactly `terminal`.
-- `actions` must be a non-empty list of action objects.
-- Every action object must include at least one of: `type`, `sleep`, `wait_for`.
-- If `sleep` or `wait_timeout` is used, duration format must be `<number>ms` or `<number>s` (example: `500ms`, `2s`).
-- If `wait_mode` is used, allowed values are `default`, `screen`, `line`.
-- Prefer `wait_mode: screen` for robust matching in rendered demos.
-- `wait_mode` and `wait_timeout` are only allowed when `wait_for` is present.
+Validation requirements:
+- Top-level required keys: title, output, scenarios
+- Optional top-level keys: settings, variables, preinstall, agent_prompts
+- scenarios must contain at least 1 scenario
+- each scenario must include: label, actions
+- scenario surface must be terminal when provided
+- execution_mode values: scripted_vhs | autonomous_pty | autonomous_video
+- every action entry must be either:
+  - a string command, or
+  - an object containing at least one of:
+    type, command, input, key, hotkey, sleep, wait_for,
+    wait_screen_regex, wait_line_regex, wait_stable,
+    assert_screen_regex, assert_not_screen_regex, expect_exit_code
+- durations must match <number>ms or <number>s
+- wait_mode/wait_timeout are only valid when wait_for is present
 
-Goal:
-- Theme: marketing demo triage for an LLM agent asked to move quickly.
-- Show contrast between weak instructions and strong instructions.
-- Use realistic terminal commands/messages.
-- Keep YAML concise and deterministic.
+Quality requirements:
+- deterministic text output
+- explicit waits/assertions for state transitions
+- no ambiguous "just wait" behavior
 
-Output constraints:
-- `output` slug: `agent_generated_triage`
-- Include at least one `wait_for` action in scenario 2.
-- Keep settings consistent with this repo defaults.
+Use output slug: [OUTPUT_SLUG]
+Use title: [TITLE]
 ```
 
-## 2) Narrative-to-Screenplay Converter
-Use this when you already have a narrative and need valid YAML.
+## 2) Narrative-to-screenplay converter
 
 ```text
-Convert the narrative below into a valid screenplay YAML for this repo.
-
-Return ONLY YAML.
+Convert this narrative into valid terminal-demo-studio screenplay YAML.
+Return YAML only.
 
 Narrative:
 [PASTE NARRATIVE]
 
-Validation contract:
-- Produce top-level keys: `title`, `output`, `settings`, `scenarios`.
-- Keep `scenarios` length >= 2.
-- Use scenario structure exactly:
-  - `label`: string
-  - `surface`: `terminal`
-  - `setup`: list of shell commands (can be empty)
-  - `actions`: list of action objects
-- Action object rules:
-  - Must include one or more of `type`, `sleep`, `wait_for`
-  - `sleep` and `wait_timeout` must match `^\d+(ms|s)$`
-  - `wait_mode` allowed values: `default`, `screen`, `line`
-  - Prefer `wait_mode: screen` unless you explicitly need current-line semantics
-  - Never include `wait_mode` or `wait_timeout` without `wait_for`
-
-Quality requirements:
-- Use deterministic command text.
-- Include a clear before/after comparison.
-- Include one explicit validation success line in scenario 2.
-- No extra keys, no comments, no prose.
+Constraints:
+- Include settings with width, height, theme, and font_family.
+- Use execution_mode: scripted_vhs unless narrative explicitly requires autonomous interaction.
+- Add at least one wait/assert anchor for each scenario.
+- Keep command text realistic and deterministic.
+- Avoid unsupported fields.
 
 Set output slug to: [OUTPUT_SLUG]
 Set title to: [TITLE]
 ```
 
-## 3) Self-Repair Prompt for Invalid YAML
-Use this when an agent produced invalid screenplay YAML and you want a fixed version.
+## 3) Autonomous-video policy-safe generator
 
 ```text
-You are fixing invalid screenplay YAML for this repository.
+Generate a valid autonomous_video screenplay YAML for terminal-demo-studio.
+Return only YAML.
+
+Requirements:
+- execution_mode must be autonomous_video
+- include a policy section using agent_prompts
+- if mode=approve, include allow_regex
+- include bounded max_rounds (<= 6)
+- include at least one wait_for per control step
+- do not use expect_exit_code
+- include explicit final wait_for success text
+
+Goal narrative:
+[PASTE NARRATIVE]
+
+Output slug: [OUTPUT_SLUG]
+Title: [TITLE]
+```
+
+## 4) Self-repair prompt for invalid YAML
+
+```text
+You are repairing invalid terminal-demo-studio screenplay YAML.
 
 Input YAML:
 [PASTE YAML]
 
-Known validation error(s):
-[PASTE ERROR TEXT]
+Validation error(s):
+[PASTE ERRORS]
 
 Task:
-- Return a corrected YAML screenplay that preserves original intent.
-- Return YAML only.
-
-Must-pass rules:
-- Keep required top-level keys: `title`, `output`, `settings`, `scenarios`.
-- Ensure at least 2 scenarios.
-- Ensure every scenario has non-empty `actions`.
-- Ensure every action has one of `type`, `sleep`, `wait_for`.
-- Enforce duration format `<number>ms|<number>s`.
-- Enforce `wait_mode` in {`default`,`screen`,`line`}.
-- Remove any fields not supported by this schema.
-
-Before finalizing internally, run this checklist:
-1. Scenarios >= 2
-2. All actions valid
-3. Wait fields consistent
-4. YAML is syntactically valid
-5. Output is only YAML text
+- Return corrected YAML only.
+- Preserve original intent.
+- Keep schema-valid fields only.
+- Ensure every scenario has at least one action.
+- Ensure duration formatting and wait constraints are valid.
 ```
