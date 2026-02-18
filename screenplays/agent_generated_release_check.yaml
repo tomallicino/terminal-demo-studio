@@ -1,6 +1,7 @@
 title: "Release Compliance Workflow"
 output: "release_compliance_check"
 variables:
+  demo_dir: "{{tmp_dir}}/terminal_demo_studio_release_gate"
   release_version: "v1.4.0"
   release_branch: "release/v1.4.0"
 settings:
@@ -14,43 +15,147 @@ settings:
   line_height: 1.15
   letter_spacing: 0
 preinstall:
-  - "echo 'Bootstrapping release compliance workflow'"
-  - "python --version"
-  - "git --version"
+  - "rm -rf {{demo_dir}} && mkdir -p {{demo_dir}}"
+  - |
+    cat > {{demo_dir}}/release_gate.py <<'PY'
+    import argparse
+    import json
+    from pathlib import Path
+
+
+    def main() -> int:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--manifest", required=True)
+        parser.add_argument("--changelog", required=True)
+        args = parser.parse_args()
+
+        manifest = json.loads(Path(args.manifest).read_text())
+        changelog = Path(args.changelog).read_text()
+
+        checks = [
+            (
+                "lockfile freshness",
+                manifest["lockfile_sha"] == manifest["expected_lockfile_sha"],
+                f"expected={manifest['expected_lockfile_sha']} actual={manifest['lockfile_sha']}",
+            ),
+            (
+                "security scan",
+                manifest.get("security_scan") == "pass",
+                f"scan={manifest.get('security_scan', 'missing')}",
+            ),
+            (
+                "changelog coverage",
+                f"## {manifest['version']}" in changelog,
+                f"section=## {manifest['version']}",
+            ),
+            (
+                "approver signoff",
+                "release-manager" in manifest.get("approvals", []),
+                f"approvals={manifest.get('approvals', [])}",
+            ),
+        ]
+
+        print(f"[gate] release={manifest['version']} branch={manifest['branch']}")
+        failed: list[str] = []
+        for name, ok, details in checks:
+            status = "PASS" if ok else "FAIL"
+            print(f"[check] {name}: {status} ({details})")
+            if not ok:
+                failed.append(name)
+
+        if failed:
+            print(f"[result] FAIL ({', '.join(failed)})")
+            return 1
+
+        print("[result] PASS (all release gates satisfied)")
+        return 0
+
+
+    if __name__ == "__main__":
+        raise SystemExit(main())
+    PY
+  - |
+    cat > {{demo_dir}}/release_manifest_good.json <<'JSON'
+    {
+      "version": "{{release_version}}",
+      "branch": "{{release_branch}}",
+      "expected_lockfile_sha": "a8be42f1",
+      "lockfile_sha": "a8be42f1",
+      "security_scan": "pass",
+      "approvals": ["release-manager", "qa-lead"]
+    }
+    JSON
+  - |
+    cat > {{demo_dir}}/release_manifest_bad.json <<'JSON'
+    {
+      "version": "{{release_version}}",
+      "branch": "{{release_branch}}",
+      "expected_lockfile_sha": "a8be42f1",
+      "lockfile_sha": "09d9fe12",
+      "security_scan": "pass",
+      "approvals": ["qa-lead"]
+    }
+    JSON
+  - |
+    cat > {{demo_dir}}/CHANGELOG_good.md <<'MD'
+    # Changelog
+
+    ## {{release_version}}
+    - Added deterministic capture-mode diagnostics for release workflows.
+    - Improved label rendering fallback when ffmpeg drawtext is unavailable.
+    MD
+  - |
+    cat > {{demo_dir}}/CHANGELOG_bad.md <<'MD'
+    # Changelog
+
+    ## v1.3.9
+    - Previous release entry retained.
+    MD
+  - |
+    cat > {{demo_dir}}/release_plan.py <<'PY'
+    import json
+    from pathlib import Path
+
+    manifest = json.loads(Path("release_manifest.json").read_text())
+    print(
+        "release_plan="
+        f"tag={manifest['version']} "
+        f"approvals={','.join(manifest.get('approvals', []))} "
+        "window=02:00 UTC"
+    )
+    PY
+  - "cp {{demo_dir}}/release_manifest_good.json {{demo_dir}}/release_manifest.json"
+  - "cp {{demo_dir}}/CHANGELOG_good.md {{demo_dir}}/CHANGELOG.md"
+  - "cd {{demo_dir}} && git init -q && git config user.email demo@local && git config user.name Demo && git add . && git commit -qm 'chore: seed release gate demo'"
 scenarios:
   - label: "Non-Compliant Candidate"
     surface: "terminal"
     setup:
-      - "export RELEASE_VERSION={{release_version}}"
-      - "export RELEASE_BRANCH={{release_branch}}"
+      - "cd {{demo_dir}}"
+      - "cp release_manifest_bad.json release_manifest.json"
+      - "cp CHANGELOG_bad.md CHANGELOG.md"
     actions:
-      - type: "echo \"Preparing ${RELEASE_VERSION} from ${RELEASE_BRANCH}\""
-      - sleep: "700ms"
-      - type: "echo '[check] lockfile freshness: FAIL (drift detected)'"
-      - sleep: "500ms"
-      - type: "echo '[check] security scan: PASS'"
-      - sleep: "500ms"
-      - type: "echo '[check] changelog coverage: FAIL (missing user-facing entry)'"
-      - wait_for: "[check] changelog coverage: FAIL"
+      - type: "cd {{demo_dir}}"
+      - type: "git status -sb"
+      - type: "python3 -m json.tool release_manifest.json"
+      - type: "python3 release_gate.py --manifest release_manifest.json --changelog CHANGELOG.md"
+      - wait_for: "[result] FAIL"
         wait_mode: "screen"
-        wait_timeout: "2s"
-      - type: "echo '[result] Release blocked until compliance gates are fixed.'"
+        wait_timeout: "8s"
+      - type: "grep -n '^## ' CHANGELOG.md || true"
       - sleep: "1s"
   - label: "Compliant Candidate"
     surface: "terminal"
     setup:
-      - "export RELEASE_VERSION={{release_version}}"
-      - "export RELEASE_BRANCH={{release_branch}}"
+      - "cd {{demo_dir}}"
+      - "cp release_manifest_good.json release_manifest.json"
+      - "cp CHANGELOG_good.md CHANGELOG.md"
     actions:
-      - type: "echo \"Preparing ${RELEASE_VERSION} from ${RELEASE_BRANCH}\""
-      - sleep: "700ms"
-      - type: "echo '[check] lockfile freshness: PASS'"
-      - sleep: "500ms"
-      - type: "echo '[check] security scan: PASS'"
-      - sleep: "500ms"
-      - type: "echo '[check] changelog coverage: PASS'"
-      - wait_for: "[check] changelog coverage: PASS"
+      - type: "cd {{demo_dir}}"
+      - type: "git status -sb"
+      - type: "python3 release_gate.py --manifest release_manifest.json --changelog CHANGELOG.md"
+      - wait_for: "[result] PASS"
         wait_mode: "screen"
-        wait_timeout: "2s"
-      - type: "echo '[result] Release approved. Tag and publish artifacts.'"
+        wait_timeout: "8s"
+      - type: "python3 release_plan.py"
       - sleep: "1s"

@@ -14,35 +14,127 @@ settings:
   letter_spacing: 0
 preinstall:
   - "rm -rf {{demo_dir}} && mkdir -p {{demo_dir}}"
-  - "{ echo 'import unittest'; echo 'from flags import is_enabled'; echo ''; echo 'class FeatureFlagTests(unittest.TestCase):'; echo '    def test_checkout_flag(self):'; echo \"        self.assertTrue(is_enabled('checkout_v2'))\"; echo ''; echo \"if __name__ == '__main__':\"; echo '    unittest.main()'; } > {{demo_dir}}/test_flags.py"
-  - "{ echo 'FLAGS = dict('; echo '    checkout_v2=True,'; echo ')'; echo ''; echo 'def is_enabled(name):'; echo '    return FLAGS.get(name, False)'; } > {{demo_dir}}/flags.py"
+  - |
+    cat > {{demo_dir}}/flags_after.py <<'PY'
+    FLAGS = {
+        "checkout_v2": {"enabled": True, "rollout_pct": 75, "owners": ["payments"]},
+        "pricing_cache_v2": {"enabled": True, "rollout_pct": 100, "owners": ["platform"]},
+    }
+
+
+    def is_enabled(name: str) -> bool:
+        return bool(FLAGS.get(name, {}).get("enabled", False))
+
+
+    def rollout_percentage(name: str) -> int:
+        return int(FLAGS.get(name, {}).get("rollout_pct", 0))
+    PY
+  - |
+    cat > {{demo_dir}}/flags_before.py <<'PY'
+    FLAGS = {
+        "checkout_v2": {"enabled": False, "rollout_pct": 0, "owners": ["payments"]},
+        "pricing_cache_v2": {"enabled": True, "rollout_pct": 100, "owners": ["platform"]},
+    }
+
+
+    def is_enabled(name: str) -> bool:
+        return bool(FLAGS.get(name, {}).get("enabled", False))
+
+
+    def rollout_percentage(name: str) -> int:
+        return int(FLAGS.get(name, {}).get("rollout_pct", 0))
+    PY
+  - "cp {{demo_dir}}/flags_after.py {{demo_dir}}/flags.py"
+  - |
+    cat > {{demo_dir}}/flag_audit.py <<'PY'
+    import argparse
+    from flags import is_enabled, rollout_percentage
+
+
+    def main() -> int:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--flag", required=True)
+        parser.add_argument("--min-rollout", type=int, default=50)
+        args = parser.parse_args()
+
+        enabled = is_enabled(args.flag)
+        rollout = rollout_percentage(args.flag)
+
+        print(f"[audit] flag={args.flag}")
+        print(f"[audit] enabled={enabled} rollout={rollout}%")
+
+        if not enabled:
+            print("[audit] FAIL (flag disabled)")
+            return 1
+        if rollout < args.min_rollout:
+            print(f"[audit] FAIL (rollout below {args.min_rollout}%)")
+            return 1
+
+        print("[audit] PASS (flag and rollout thresholds satisfied)")
+        return 0
+
+
+    if __name__ == "__main__":
+        raise SystemExit(main())
+    PY
+  - |
+    cat > {{demo_dir}}/test_flags.py <<'PY'
+    import unittest
+    from flags import is_enabled, rollout_percentage
+
+
+    class FeatureFlagTests(unittest.TestCase):
+        def test_checkout_flag_enabled(self):
+            self.assertTrue(is_enabled("checkout_v2"))
+
+        def test_checkout_rollout_threshold(self):
+            self.assertGreaterEqual(rollout_percentage("checkout_v2"), 50)
+
+
+    if __name__ == "__main__":
+        unittest.main()
+    PY
+  - |
+    cat > {{demo_dir}}/flag_status.py <<'PY'
+    from flags import is_enabled, rollout_percentage
+
+    print(
+        "flag_status="
+        f"checkout_v2 enabled={is_enabled('checkout_v2')} "
+        f"rollout={rollout_percentage('checkout_v2')}%"
+    )
+    PY
   - "cd {{demo_dir}} && git init -q && git config user.email demo@local && git config user.name Demo && git add . && git commit -qm 'chore: seed feature flag module'"
 scenarios:
   - label: "Before Fix"
     surface: "terminal"
     setup:
       - "cd {{demo_dir}}"
-      - "{ echo 'FLAGS = dict('; echo '    checkout_v2=False,'; echo ')'; echo ''; echo 'def is_enabled(name):'; echo '    return FLAGS.get(name, False)'; } > flags.py"
+      - "cp flags_before.py flags.py"
     actions:
       - type: "cd {{demo_dir}}"
       - type: "git status -sb"
       - type: "git diff -- flags.py"
+      - type: "python3 flag_audit.py --flag checkout_v2 --min-rollout 50"
       - type: "python3 -m unittest -q"
       - wait_for: "FAIL:"
         wait_mode: "screen"
         wait_timeout: "8s"
+      - type: "python3 flag_status.py"
       - sleep: "1200ms"
   - label: "After Fix"
     surface: "terminal"
     setup:
       - "cd {{demo_dir}}"
-      - "{ echo 'FLAGS = dict('; echo '    checkout_v2=True,'; echo ')'; echo ''; echo 'def is_enabled(name):'; echo '    return FLAGS.get(name, False)'; } > flags.py"
+      - "cp flags_after.py flags.py"
     actions:
       - type: "cd {{demo_dir}}"
       - type: "git status -sb"
       - type: "git diff -- flags.py"
+      - type: "python3 flag_audit.py --flag checkout_v2 --min-rollout 50"
       - type: "python3 -m unittest -q"
       - wait_for: "OK"
         wait_mode: "screen"
         wait_timeout: "8s"
+      - type: "python3 flag_status.py"
       - sleep: "1200ms"

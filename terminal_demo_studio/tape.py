@@ -49,6 +49,14 @@ def _prompt_setup_command(prompt: PromptSettings) -> str:
     return f"export PS1='{escaped}'"
 
 
+def _append_typed_lines(lines: list[str], command: str, *, press_enter: bool) -> None:
+    chunks = command.splitlines() or [command]
+    for chunk in chunks:
+        lines.append(_format_type_command(chunk))
+        if press_enter:
+            lines.append("Enter")
+
+
 def compile_tape(scenario: Scenario, settings: Settings, outputs: list[str]) -> str:
     lines: list[str] = []
     for output in outputs:
@@ -77,24 +85,20 @@ def compile_tape(scenario: Scenario, settings: Settings, outputs: list[str]) -> 
     if setup_commands:
         lines.append("Hide")
         for command in setup_commands:
-            lines.append(_format_type_command(command))
-            lines.append("Enter")
-        lines.append(_format_type_command("clear"))
-        lines.append("Enter")
+            _append_typed_lines(lines, command, press_enter=True)
+        _append_typed_lines(lines, "clear", press_enter=True)
         lines.append("Show")
 
     for action in scenario.actions:
         if isinstance(action, str):
-            lines.append(_format_type_command(action))
-            lines.append("Enter")
+            _append_typed_lines(lines, action, press_enter=True)
             continue
 
         command_text = action.command or action.type
         if command_text:
-            lines.append(_format_type_command(command_text))
-            lines.append("Enter")
+            _append_typed_lines(lines, command_text, press_enter=True)
         if action.input:
-            lines.append(_format_type_command(action.input))
+            _append_typed_lines(lines, action.input, press_enter=False)
         if action.key:
             lines.append(action.key)
         if action.hotkey:

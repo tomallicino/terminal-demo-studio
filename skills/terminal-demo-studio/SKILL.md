@@ -24,7 +24,7 @@ pip install -e '.[dev]'
 
 studio init
 studio validate screenplays/getting_started.yaml --explain
-studio run screenplays/getting_started.yaml --mode scripted_vhs --local --output-dir outputs --no-mp4
+studio run screenplays/getting_started.yaml --mode scripted_vhs --local --output-dir outputs --output gif
 ```
 
 ## Modes
@@ -45,9 +45,8 @@ Use `examples/real/` for optional advanced external-tool sessions.
 Rules:
 
 1. Keep public onboarding and README demos on portable mocks.
-2. Real vendor-named demos must include manifest metadata (tool version and capture date).
-3. Use `--mode autonomous_pty` with explicit waits/assertions.
-4. Treat retries/timeouts as explicit screenplay policy, not hidden runtime behavior.
+2. Use `--mode autonomous_pty` with explicit waits/assertions.
+3. Treat retries/timeouts as explicit screenplay policy, not hidden runtime behavior.
 
 ## Anti-Flake Checklist
 

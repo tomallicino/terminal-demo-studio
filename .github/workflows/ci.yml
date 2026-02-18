@@ -100,14 +100,22 @@ jobs:
             check=False,
           )
           text = f"{probe.stdout}\n{probe.stderr}"
-          if probe.returncode != 0 or "drawtext" not in text:
-            raise SystemExit("ffmpeg drawtext filter unavailable")
-          print("scripted render prerequisites ready")
+          has_drawtext = probe.returncode == 0 and "drawtext" in text
+          if has_drawtext:
+            print("scripted render prerequisites ready (drawtext labels)")
+          else:
+            try:
+              from PIL import Image  # noqa: F401
+            except Exception as exc:
+              raise SystemExit(
+                "ffmpeg drawtext unavailable and Pillow label fallback missing"
+              ) from exc
+            print("scripted render prerequisites ready (Pillow label fallback)")
           PY
 
       - name: Portable mock render smoke
         run: |
-          python -m terminal_demo_studio.cli run examples/mock/safety_wizard.yaml --mode scripted_vhs --local --output-dir outputs --no-mp4
+          python -m terminal_demo_studio.cli run examples/mock/safety_wizard.yaml --mode scripted_vhs --local --output-dir outputs --output gif
 
       - name: Setup Node
         if: runner.os == 'Linux'

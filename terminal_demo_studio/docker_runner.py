@@ -143,9 +143,9 @@ def run_in_docker(
         cmd.extend(["--output-dir", str(Path("/workspace") / output_rel)])
     if keep_temp:
         cmd.append("--keep-temp")
-    if not produce_mp4:
-        cmd.append("--no-mp4")
-    if not produce_gif:
-        cmd.append("--no-gif")
+    if produce_mp4 and not produce_gif:
+        cmd.extend(["--output", "mp4"])
+    elif produce_gif and not produce_mp4:
+        cmd.extend(["--output", "gif"])
 
     subprocess.run(cmd, check=True)

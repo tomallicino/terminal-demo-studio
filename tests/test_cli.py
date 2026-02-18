@@ -148,6 +148,8 @@ def test_run_local_dispatches_to_director(monkeypatch: object, tmp_path: Path) -
     assert result.exit_code == 0
     assert called["screenplay_path"] == screenplay
     assert called["playback_mode"] == "sequential"
+    assert called["produce_mp4"] is True
+    assert called["produce_gif"] is True
 
 
 def test_run_local_allows_simultaneous_playback(monkeypatch: object, tmp_path: Path) -> None:
@@ -184,6 +186,37 @@ def test_run_local_allows_simultaneous_playback(monkeypatch: object, tmp_path: P
 
     assert result.exit_code == 0
     assert called["playback_mode"] == "simultaneous"
+
+
+def test_run_output_option_limits_artifacts(monkeypatch: object, tmp_path: Path) -> None:
+    screenplay = tmp_path / "demo.yaml"
+    screenplay.write_text(
+        """
+        title: Demo
+        output: demo
+        settings: {}
+        scenarios:
+          - label: Left
+            actions:
+              - type: echo left
+        """,
+        encoding="utf-8",
+    )
+
+    called: dict[str, object] = {}
+
+    def fake_run_director(**kwargs: object) -> tuple[Path, Path | None]:
+        called.update(kwargs)
+        return (Path("a.mp4"), None)
+
+    monkeypatch.setattr(cli, "run_director", fake_run_director)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["run", str(screenplay), "--local", "--output", "mp4"])
+
+    assert result.exit_code == 0
+    assert called["produce_mp4"] is True
+    assert called["produce_gif"] is False
 
 
 def test_run_docker_forwards_playback_mode(monkeypatch: object, tmp_path: Path) -> None:

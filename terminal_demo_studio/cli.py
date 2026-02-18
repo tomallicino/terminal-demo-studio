@@ -66,8 +66,13 @@ def app() -> None:
     default="sequential",
     show_default=True,
 )
-@click.option("produce_mp4", "--mp4/--no-mp4", default=True)
-@click.option("produce_gif", "--gif/--no-gif", default=True)
+@click.option(
+    "output_formats",
+    "--output",
+    type=click.Choice(["mp4", "gif"], case_sensitive=False),
+    multiple=True,
+    help="Output format(s). Repeat to request multiple. Defaults to both.",
+)
 @click.option(
     "run_mode",
     "--mode",
@@ -82,10 +87,12 @@ def run(
     keep_temp: bool,
     rebuild: bool,
     playback_mode: str,
-    produce_mp4: bool,
-    produce_gif: bool,
+    output_formats: tuple[str, ...],
     run_mode: str,
 ) -> None:
+    selected_outputs = {value.lower() for value in output_formats}
+    produce_mp4 = not selected_outputs or "mp4" in selected_outputs
+    produce_gif = not selected_outputs or "gif" in selected_outputs
     if not produce_mp4 and not produce_gif:
         raise click.ClickException("At least one output type must be enabled")
 

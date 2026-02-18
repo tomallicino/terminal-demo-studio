@@ -14,9 +14,90 @@ settings:
   letter_spacing: 0
 preinstall:
   - "rm -rf {{demo_dir}} && mkdir -p {{demo_dir}}"
-  - "{ echo 'def transform(items):'; echo '    return [item.strip().lower() for item in items]'; } > {{demo_dir}}/utils.py"
-  - "{ echo 'import unittest'; echo 'from utils import transform'; echo ''; echo 'class UtilsTests(unittest.TestCase):'; echo '    def test_transform(self):'; echo \"        self.assertEqual(transform([' A ', 'B ']), ['a', 'b'])\"; echo ''; echo \"if __name__ == '__main__':\"; echo '    unittest.main()'; } > {{demo_dir}}/test_utils.py"
-  - "cd {{demo_dir}} && git init -q && git config user.email demo@local && git config user.name Demo && git add . && git commit -qm 'seed single prompt demo'"
+  - |
+    cat > {{demo_dir}}/triage.py <<'PY'
+    from __future__ import annotations
+
+    import argparse
+    from collections import Counter
+    from pathlib import Path
+
+
+    def parse_failures(lines: list[str]) -> Counter[str]:
+        current_cmd = "unknown"
+        failures: Counter[str] = Counter()
+        for line in lines:
+            if line.startswith("[cmd] "):
+                current_cmd = line.removeprefix("[cmd] ")
+            if line.startswith("[error] "):
+                signature = f"{current_cmd} -> {line.removeprefix('[error] ')}"
+                failures[signature] += 1
+        return failures
+
+
+    def main() -> int:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--input", required=True)
+        parser.add_argument("--top", type=int, default=3)
+        args = parser.parse_args()
+
+        lines = Path(args.input).read_text().splitlines()
+        failures = parse_failures(lines)
+
+        print(f"Loaded {len(lines)} log lines from {args.input}")
+        print("Top failing commands:")
+        for index, (item, count) in enumerate(failures.most_common(args.top), start=1):
+            print(f"  {index}. {item} (count={count})")
+        print(f"Unique failure signatures: {len(failures)}")
+        return 0
+
+
+    if __name__ == "__main__":
+        raise SystemExit(main())
+    PY
+  - |
+    cat > {{demo_dir}}/cli_session.log <<'LOG'
+    [cmd] studio validate screenplays/checkout.yaml --explain
+    [error] schema mismatch on scenarios[1].actions[4]
+    [cmd] studio run screenplays/checkout.yaml --mode scripted_vhs --local
+    [error] wait timeout after 8s
+    [cmd] studio run screenplays/checkout.yaml --mode scripted_vhs --local
+    [error] wait timeout after 8s
+    [cmd] studio doctor --mode scripted_vhs
+    [error] ffmpeg drawtext unavailable
+    [cmd] studio validate screenplays/checkout.yaml --explain
+    [error] schema mismatch on scenarios[1].actions[4]
+    LOG
+  - |
+    cat > {{demo_dir}}/test_triage.py <<'PY'
+    import unittest
+    from triage import parse_failures
+
+
+    class TriageTests(unittest.TestCase):
+        def test_parse_failures_counts_signatures(self):
+            lines = [
+                "[cmd] studio run demo.yaml",
+                "[error] timeout",
+                "[cmd] studio run demo.yaml",
+                "[error] timeout",
+            ]
+            failures = parse_failures(lines)
+            self.assertEqual(failures["studio run demo.yaml -> timeout"], 2)
+
+
+    if __name__ == "__main__":
+        unittest.main()
+    PY
+  - |
+    cat > {{demo_dir}}/log_stats.py <<'PY'
+    from pathlib import Path
+
+    lines = Path("cli_session.log").read_text().splitlines()
+    error_count = sum(1 for line in lines if line.startswith("[error] "))
+    print(f"log_stats=events:{len(lines)} errors:{error_count}")
+    PY
+  - "cd {{demo_dir}} && git init -q && git config user.email demo@local && git config user.name Demo && git add . && git commit -qm 'seed single prompt triage demo'"
 scenarios:
   - label: "macOS Prompt"
     surface: "terminal"
@@ -24,15 +105,19 @@ scenarios:
       style: "macos"
       user: "dev"
       host: "workstation"
-      path: "full"
+      path: "basename"
       symbol: "%"
     setup:
       - "cd {{demo_dir}}"
     actions:
-      - type: "pwd"
       - type: "git status -sb"
+      - type: "python3 triage.py --input cli_session.log --top 3"
+      - wait_for: "Top failing commands:"
+        wait_mode: "screen"
+        wait_timeout: "8s"
       - type: "python3 -m unittest -q"
       - wait_for: "OK"
         wait_mode: "screen"
         wait_timeout: "8s"
+      - type: "python3 log_stats.py"
       - sleep: "1200ms"
