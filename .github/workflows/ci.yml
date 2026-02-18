@@ -123,6 +123,7 @@ jobs:
         with:
           name: autonomous-video-mp4
           path: outputs/.terminal_demo_studio_runs/*autonomous_video*/media/*.mp4
+          include-hidden-files: true
           if-no-files-found: error
 
       - name: README smoke
