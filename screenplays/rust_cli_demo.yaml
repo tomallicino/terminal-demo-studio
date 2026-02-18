@@ -1,0 +1,36 @@
+title: "Rust CLI Safety Guard Demo"
+output: "rust_cli_guard"
+variables:
+  binary_name: "safety-cli"
+settings:
+  width: 1440
+  height: 900
+  font_size: 22
+  theme: "Catppuccin Mocha"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+preinstall:
+  - "cargo --version"
+  - "echo 'Using prebuilt {{binary_name}} for demo'"
+scenarios:
+  - label: "Unsafe Binary"
+    surface: "terminal"
+    setup:
+      - "export MODE=unsafe"
+    actions:
+      - type: "{{binary_name}} delete --target prod-db"
+      - sleep: "1s"
+      - type: "echo 'Deletion executed.'"
+  - label: "Guarded Binary"
+    surface: "terminal"
+    setup:
+      - "export MODE=safe"
+    actions:
+      - type: "{{binary_name}} delete --target prod-db"
+      - wait_for: "Policy check"
+        wait_mode: "screen"
+      - sleep: "1s"
+      - type: "echo 'Blocked by policy.'"

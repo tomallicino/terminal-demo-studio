@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "terminal-demo-studio-cli"
+version = "0.1.0"
+description = "Deterministic, agent-native terminal demo pipeline"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "click==8.3.1",
+  "pydantic==2.12.5",
+  "PyYAML==6.0.3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.0.2",
+  "ruff==0.6.9",
+  "mypy==1.17.1",
+]
+
+[project.scripts]
+studio = "terminal_demo_studio.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["terminal_demo_studio*"]
+
+[tool.setuptools.package-data]
+terminal_demo_studio = ["templates/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+disallow_untyped_defs = true
+strict_optional = true
+packages = ["terminal_demo_studio"]
+
+[[tool.mypy.overrides]]
+module = ["yaml"]
+ignore_missing_imports = true

@@ -1,0 +1,16 @@
+title: "Portable Mock List Detail Flow"
+output: "mock_list_detail"
+settings:
+  width: 1440
+  height: 900
+  theme: "Catppuccin Mocha"
+scenarios:
+  - label: "List to Detail"
+    execution_mode: "scripted_vhs"
+    actions:
+      - command: "echo '[ui] projects: alpha beta gamma'"
+      - key: "Down"
+      - key: "Down"
+      - key: "Enter"
+      - command: "echo '[ui] detail: gamma status=healthy'"
+      - assert_screen_regex: "gamma status=healthy"

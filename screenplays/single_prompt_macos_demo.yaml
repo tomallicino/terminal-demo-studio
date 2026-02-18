@@ -1,0 +1,38 @@
+title: "Single Screen macOS Prompt Demo"
+output: "single_prompt_macos_demo"
+variables:
+  demo_dir: "{{tmp_dir}}/terminal_demo_studio_single_prompt"
+settings:
+  width: 1440
+  height: 900
+  font_size: 22
+  theme: "Dracula"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+preinstall:
+  - "rm -rf {{demo_dir}} && mkdir -p {{demo_dir}}"
+  - "{ echo 'def transform(items):'; echo '    return [item.strip().lower() for item in items]'; } > {{demo_dir}}/utils.py"
+  - "{ echo 'import unittest'; echo 'from utils import transform'; echo ''; echo 'class UtilsTests(unittest.TestCase):'; echo '    def test_transform(self):'; echo \"        self.assertEqual(transform([' A ', 'B ']), ['a', 'b'])\"; echo ''; echo \"if __name__ == '__main__':\"; echo '    unittest.main()'; } > {{demo_dir}}/test_utils.py"
+  - "cd {{demo_dir}} && git init -q && git config user.email demo@local && git config user.name Demo && git add . && git commit -qm 'seed single prompt demo'"
+scenarios:
+  - label: "macOS Prompt"
+    surface: "terminal"
+    prompt:
+      style: "macos"
+      user: "dev"
+      host: "workstation"
+      path: "full"
+      symbol: "%"
+    setup:
+      - "cd {{demo_dir}}"
+    actions:
+      - type: "pwd"
+      - type: "git status -sb"
+      - type: "python3 -m unittest -q"
+      - wait_for: "OK"
+        wait_mode: "screen"
+        wait_timeout: "8s"
+      - sleep: "1200ms"

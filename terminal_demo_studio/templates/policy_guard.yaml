@@ -1,0 +1,37 @@
+title: "Policy Guard Demo"
+output: "policy_guard_demo"
+variables:
+  actor: "autonomous-agent"
+  workflow_name: "deploy_customer_data_export"
+settings:
+  width: 1440
+  height: 900
+  font_size: 22
+  theme: "Catppuccin Mocha"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+preinstall:
+  - "mkdir -p policy logs"
+scenarios:
+  - label: "Without Policy"
+    surface: "terminal"
+    setup:
+      - "export AGENT_MODE=unsafe"
+    actions:
+      - type: "echo '[{{actor}}] Starting {{workflow_name}}'"
+      - sleep: "700ms"
+      - type: "echo '[OK] Executed without guard checks'"
+  - label: "With Policy"
+    surface: "terminal"
+    setup:
+      - "export AGENT_MODE=enforced"
+    actions:
+      - type: "echo '[{{actor}}] Starting {{workflow_name}}'"
+      - wait_for: "Starting {{workflow_name}}"
+        wait_mode: "screen"
+        wait_timeout: "2s"
+      - sleep: "700ms"
+      - type: "echo '[BLOCK] Policy violation detected'"

@@ -1,0 +1,28 @@
+title: "New Demo"
+output: "new_demo"
+variables:
+  command: "echo hello"
+settings:
+  width: 1440
+  height: 900
+  font_size: 22
+  theme: "Catppuccin Mocha"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+preinstall: []
+scenarios:
+  - label: "Before"
+    surface: "terminal"
+    setup: []
+    actions:
+      - type: "{{command}}"
+      - sleep: "1s"
+  - label: "After"
+    surface: "terminal"
+    setup: []
+    actions:
+      - type: "{{command}}"
+      - sleep: "1s"

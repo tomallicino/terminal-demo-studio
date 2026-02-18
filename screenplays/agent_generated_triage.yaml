@@ -1,0 +1,47 @@
+title: "LLM Agent Marketing Demo Triage"
+output: "agent_generated_triage"
+variables:
+  request: "Produce a marketing demo quickly"
+  screenplay_path: "screenplays/agent_generated_triage.yaml"
+settings:
+  width: 1440
+  height: 900
+  font_size: 22
+  theme: "Catppuccin Mocha"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+preinstall:
+  - "echo 'Initializing rapid triage workflow demo'"
+scenarios:
+  - label: "No Triage Instructions"
+    surface: "terminal"
+    setup:
+      - "export AGENT_MODE=unguided"
+    actions:
+      - type: "echo 'User: {{request}}'"
+      - sleep: "600ms"
+      - type: "echo 'Agent: drafting flashy copy first...'"
+      - sleep: "1s"
+      - type: "echo 'Result: output is incomplete and fails schema checks'"
+      - sleep: "1s"
+      - type: "echo 'Issue: missing strict format + validation contract'"
+
+  - label: "Triage Instructions + Validation"
+    surface: "terminal"
+    setup:
+      - "export AGENT_MODE=triage"
+    actions:
+      - type: "echo 'Agent loads strict YAML contract and field checklist'"
+      - sleep: "700ms"
+      - type: "echo 'Agent generates exactly two scenarios with valid actions'"
+      - sleep: "700ms"
+      - type: "echo 'studio validate {{screenplay_path}}'"
+      - sleep: "400ms"
+      - type: "echo 'Valid screenplay: {{screenplay_path}}'"
+      - wait_for: "Valid screenplay: {{screenplay_path}}"
+        wait_mode: "screen"
+        wait_timeout: "2s"
+      - type: "echo 'Outcome: fast, reproducible marketing demo screenplay ready'"

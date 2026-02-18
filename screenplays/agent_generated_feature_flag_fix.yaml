@@ -1,0 +1,48 @@
+title: "Feature Flag Bugfix Workflow"
+output: "feature_flag_bugfix_demo"
+variables:
+  demo_dir: "{{tmp_dir}}/terminal_demo_studio_feature_flag"
+settings:
+  width: 1440
+  height: 900
+  font_size: 22
+  theme: "nord"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+preinstall:
+  - "rm -rf {{demo_dir}} && mkdir -p {{demo_dir}}"
+  - "{ echo 'import unittest'; echo 'from flags import is_enabled'; echo ''; echo 'class FeatureFlagTests(unittest.TestCase):'; echo '    def test_checkout_flag(self):'; echo \"        self.assertTrue(is_enabled('checkout_v2'))\"; echo ''; echo \"if __name__ == '__main__':\"; echo '    unittest.main()'; } > {{demo_dir}}/test_flags.py"
+  - "{ echo 'FLAGS = dict('; echo '    checkout_v2=True,'; echo ')'; echo ''; echo 'def is_enabled(name):'; echo '    return FLAGS.get(name, False)'; } > {{demo_dir}}/flags.py"
+  - "cd {{demo_dir}} && git init -q && git config user.email demo@local && git config user.name Demo && git add . && git commit -qm 'chore: seed feature flag module'"
+scenarios:
+  - label: "Before Fix"
+    surface: "terminal"
+    setup:
+      - "cd {{demo_dir}}"
+      - "{ echo 'FLAGS = dict('; echo '    checkout_v2=False,'; echo ')'; echo ''; echo 'def is_enabled(name):'; echo '    return FLAGS.get(name, False)'; } > flags.py"
+    actions:
+      - type: "cd {{demo_dir}}"
+      - type: "git status -sb"
+      - type: "git diff -- flags.py"
+      - type: "python3 -m unittest -q"
+      - wait_for: "FAIL:"
+        wait_mode: "screen"
+        wait_timeout: "8s"
+      - sleep: "1200ms"
+  - label: "After Fix"
+    surface: "terminal"
+    setup:
+      - "cd {{demo_dir}}"
+      - "{ echo 'FLAGS = dict('; echo '    checkout_v2=True,'; echo ')'; echo ''; echo 'def is_enabled(name):'; echo '    return FLAGS.get(name, False)'; } > flags.py"
+    actions:
+      - type: "cd {{demo_dir}}"
+      - type: "git status -sb"
+      - type: "git diff -- flags.py"
+      - type: "python3 -m unittest -q"
+      - wait_for: "OK"
+        wait_mode: "screen"
+        wait_timeout: "8s"
+      - sleep: "1200ms"

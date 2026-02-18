@@ -1,0 +1,17 @@
+title: "Portable Mock Safety Wizard"
+output: "mock_safety_wizard"
+settings:
+  width: 1440
+  height: 900
+  theme: "TokyoNightStorm"
+scenarios:
+  - label: "Safety Wizard"
+    execution_mode: "scripted_vhs"
+    actions:
+      - command: "echo '[wizard] scanning dependencies...'"
+      - wait_screen_regex: "scanning"
+      - wait_stable: "400ms"
+      - command: "echo '[wizard] open modal: risky change blocked'"
+      - key: "Down"
+      - key: "Enter"
+      - assert_screen_regex: "blocked"

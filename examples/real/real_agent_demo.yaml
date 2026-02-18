@@ -1,0 +1,14 @@
+title: "Advanced Real Tool Demo"
+output: "real_tool_agent_loop"
+settings:
+  width: 1440
+  height: 900
+  theme: "Dracula"
+scenarios:
+  - label: "Real Agent Session"
+    execution_mode: "autonomous_pty"
+    adapter: "shell_marked"
+    shell: "auto"
+    actions:
+      - command: "echo 'Run your real tool command here (for example: codex --help)'"
+      - wait_screen_regex: "real tool command"

@@ -1,0 +1,44 @@
+title: "Release Compliance Workflow"
+output: "release_compliance_check"
+variables:
+  release_version: "v1.0.0"
+  release_branch: "release/v1.0.0"
+settings:
+  width: 1440
+  height: 900
+  font_size: 22
+  theme: "Catppuccin Mocha"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+preinstall:
+  - "echo 'Bootstrapping release compliance workflow'"
+scenarios:
+  - label: "Non-Compliant Candidate"
+    surface: "terminal"
+    setup:
+      - "export RELEASE_VERSION={{release_version}}"
+      - "export RELEASE_BRANCH={{release_branch}}"
+    actions:
+      - type: "echo '[check] lockfile freshness: FAIL'"
+      - sleep: "500ms"
+      - type: "echo '[check] changelog coverage: FAIL'"
+      - wait_for: "changelog coverage: FAIL"
+        wait_mode: "screen"
+        wait_timeout: "2s"
+      - type: "echo '[result] Release blocked'"
+  - label: "Compliant Candidate"
+    surface: "terminal"
+    setup:
+      - "export RELEASE_VERSION={{release_version}}"
+      - "export RELEASE_BRANCH={{release_branch}}"
+    actions:
+      - type: "echo '[check] lockfile freshness: PASS'"
+      - sleep: "500ms"
+      - type: "echo '[check] changelog coverage: PASS'"
+      - wait_for: "changelog coverage: PASS"
+        wait_mode: "screen"
+        wait_timeout: "2s"
+      - type: "echo '[result] Release approved'"

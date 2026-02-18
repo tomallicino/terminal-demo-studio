@@ -1,0 +1,41 @@
+title: "Drift Protection Demo"
+output: "drift_demo"
+variables:
+  tool_name: "delete_prod_db"
+settings:
+  width: 1440
+  height: 900
+  font_size: 22
+  theme: "Catppuccin Mocha"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+preinstall:
+  - "echo 'Preinstall step complete'"
+scenarios:
+  - label: "Without Cask"
+    surface: "terminal"
+    setup:
+      - "export CASK_MODE=unsafe"
+      - "echo 'admin_key=12345' > .env"
+    actions:
+      - type: "echo '[unsafe] cask run --tool {{tool_name}}'"
+      - sleep: "1s"
+      - type: "echo 'Deleting production database...'"
+      - sleep: "2s"
+      - type: "echo '✅ Database deleted.'"
+  - label: "With Cask"
+    surface: "terminal"
+    setup:
+      - "export CASK_MODE=safe"
+    actions:
+      - type: "echo '[safe] cask run --tool {{tool_name}}'"
+      - sleep: "500ms"
+      - type: "echo 'Analyzing lockfile...'"
+      - wait_for: "Analyzing lockfile..."
+        wait_mode: "line"
+        wait_timeout: "1s"
+      - type: "echo '[BLOCK] Policy Violation: Tool {{tool_name}} not in lockfile.'"
+      - sleep: "3s"

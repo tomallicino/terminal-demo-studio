@@ -1,0 +1,58 @@
+title: "Agent Safety Policy Guard Demo"
+output: "agent_generated_policy_guard"
+variables:
+  actor: "autonomous-agent"
+  workflow_name: "deploy_customer_data_export"
+  target_env: "production"
+  policy_file: "policy/safety_guard.yaml"
+  ticket_id: "SEC-4821"
+settings:
+  width: 1440
+  height: 900
+  font_size: 22
+  theme: "Catppuccin Mocha"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+preinstall:
+  - "mkdir -p policy logs"
+  - "echo 'allowlist: [status-page, metrics-read]' > {{policy_file}}"
+  - "echo 'policy bootstrap complete' > logs/bootstrap.log"
+scenarios:
+  - label: "Before Policy Guard"
+    surface: "terminal"
+    setup:
+      - "export AGENT_MODE=unsafe"
+      - "export TARGET_ENV={{target_env}}"
+      - "export CHANGE_TICKET={{ticket_id}}"
+    actions:
+      - type: "echo '[{{actor}}] Starting {{workflow_name}} against $TARGET_ENV'"
+      - sleep: "700ms"
+      - type: "echo '[plan] Generating raw PII export for all customers'"
+      - sleep: "1s"
+      - type: "echo '[exec] scp exports/all_customers.csv s3://internal-prod-dumps/'"
+      - sleep: "900ms"
+      - type: "echo '[OK] Upload complete (no policy checks executed)'"
+  - label: "After Policy Guard"
+    surface: "terminal"
+    setup:
+      - "export AGENT_MODE=enforced"
+      - "export TARGET_ENV={{target_env}}"
+      - "export CHANGE_TICKET={{ticket_id}}"
+    actions:
+      - type: "echo '[{{actor}}] Starting {{workflow_name}} against $TARGET_ENV'"
+      - sleep: "700ms"
+      - type: "echo '[guard] Loading {{policy_file}} for ticket $CHANGE_TICKET'"
+      - wait_for: "Loading {{policy_file}}"
+        wait_mode: "screen"
+        wait_timeout: "2s"
+      - type: "echo '[guard] Rule match: pii-export requires approval + encrypted destination'"
+      - wait_for: "Rule match: pii-export"
+        wait_mode: "screen"
+        wait_timeout: "2s"
+      - sleep: "1s"
+      - type: "echo '[BLOCK] Destination s3://internal-prod-dumps/ is not approved for PII exports'"
+      - sleep: "1200ms"
+      - type: "echo '[next] Route output to vault://regulated/pii and request reviewer sign-off'"

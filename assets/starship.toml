@@ -1,0 +1,26 @@
+add_newline = false
+format = "$directory$git_branch$git_status$character"
+
+[directory]
+style = "fg:#89b4fa"
+truncation_length = 3
+truncate_to_repo = true
+
+[username]
+disabled = true
+
+[hostname]
+disabled = true
+
+[git_branch]
+symbol = " "
+style = "fg:#a6e3a1"
+format = " [$symbol$branch]($style)"
+
+[git_status]
+style = "fg:#f9e2af"
+format = "([$all_status$ahead_behind]($style)) "
+
+[character]
+success_symbol = "[❯](fg:#a6e3a1)"
+error_symbol = "[❯](fg:#f38ba8)"

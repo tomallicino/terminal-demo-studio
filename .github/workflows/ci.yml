@@ -1,0 +1,81 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Typecheck
+        run: mypy terminal_demo_studio
+
+      - name: Test
+        run: pytest tests -v
+
+      - name: Screenplay smoke validate
+        run: |
+          python -m terminal_demo_studio.cli validate screenplays/drift_protection.yaml
+          python -m terminal_demo_studio.cli validate examples/mock/safety_wizard.yaml
+
+      - name: Autonomous command-lane smoke
+        run: |
+          python -m terminal_demo_studio.cli run examples/mock/agent_loop.yaml --mode autonomous_pty --output-dir outputs
+
+      - name: Installed-context smoke
+        if: runner.os != 'Windows'
+        run: ./scripts/install_context_smoke.sh
+
+      - name: Release preflight
+        run: ./scripts/release_preflight.sh
+
+      - name: Install render dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg ttyd golang-go
+          go install github.com/charmbracelet/vhs@v0.10.0
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Install render dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg ttyd vhs
+
+      - name: Portable mock render smoke
+        if: runner.os != 'Windows'
+        run: |
+          python -m terminal_demo_studio.cli run examples/mock/safety_wizard.yaml --mode scripted_vhs --local --output-dir outputs --no-mp4
+
+      - name: Setup Node
+        if: runner.os == 'Linux'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Skill smoke checks
+        if: runner.os == 'Linux'
+        run: |
+          npx -y skills add . -l

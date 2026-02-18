@@ -1,0 +1,17 @@
+.git
+.venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+build
+outputs
+docs/media
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+.DS_Store

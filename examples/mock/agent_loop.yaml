@@ -1,0 +1,17 @@
+title: "Portable Mock Agent Loop"
+output: "mock_agent_loop"
+settings:
+  width: 1440
+  height: 900
+  theme: "GruvboxDark"
+scenarios:
+  - label: "Agent Loop"
+    execution_mode: "autonomous_pty"
+    adapter: "shell_marked"
+    actions:
+      - command: "echo '[agent] think: inspect failing check'"
+      - command: "echo '[agent] tool: run lint'"
+      - command: "echo '[agent] observe: lint failed on config'"
+      - command: "echo '[agent] critique: retry with corrected flag'"
+      - command: "echo '[agent] done: check passes'"
+      - assert_not_screen_regex: "panic"
