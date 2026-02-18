@@ -9,12 +9,12 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 
-studio doctor --mode auto
+tds doctor --mode auto
 tmp_workspace="$(mktemp -d)"
-studio init --destination "$tmp_workspace"
-studio validate "$tmp_workspace/screenplays/getting_started.yaml" --explain
-studio validate examples/mock/safety_wizard.yaml --explain
-studio run examples/mock/safety_wizard.yaml --mode scripted_vhs --local --output-dir outputs --output gif
-studio run examples/mock/agent_loop.yaml --mode autonomous_pty --output-dir outputs
+tds init --destination "$tmp_workspace"
+tds validate "$tmp_workspace/screenplays/getting_started.yaml" --explain
+tds render --template install_first_command --name readme_quickstart --destination "$tmp_workspace/screenplays" --mode scripted_vhs --local --output gif --output-dir "$tmp_workspace/outputs"
+tds validate examples/mock/agent_loop.yaml --explain
+tds run examples/mock/agent_loop.yaml --mode autonomous_pty --output-dir "$tmp_workspace/outputs"
 
 echo "README smoke checks passed"

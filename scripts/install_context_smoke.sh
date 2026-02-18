@@ -12,14 +12,19 @@ python -m pip install --upgrade pip >/dev/null
 pip install "$ROOT_DIR" >/dev/null
 
 cd "$TMP_ROOT"
-studio new --list-templates > templates.txt
-if ! grep -Eq '^- dev_bugfix$' templates.txt; then
-  echo "Installed-context smoke failed: dev_bugfix template not listed"
+tds new --list-templates > templates.txt
+if ! grep -Eq '^- install_first_command$' templates.txt; then
+  echo "Installed-context smoke failed: install_first_command template not listed"
   cat templates.txt
   exit 1
 fi
 
-studio new smoke_case --template dev_bugfix --destination screenplays >/dev/null
-studio validate screenplays/smoke_case.yaml --explain >/dev/null
+tds new smoke_case --template install_first_command --destination screenplays >/dev/null
+tds validate screenplays/smoke_case.yaml --explain >/dev/null
+if command -v vhs >/dev/null 2>&1; then
+  tds render screenplays/smoke_case.yaml --mode scripted_vhs --local --output gif --output-dir outputs >/dev/null
+else
+  echo "Skipping render step in install-context smoke: vhs not available in PATH"
+fi
 
 echo "Installed-context smoke checks passed"

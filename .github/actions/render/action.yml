@@ -1,0 +1,171 @@
+name: terminal-demo-studio render
+description: Render terminal demos and expose run artifacts for CI workflows.
+
+inputs:
+  screenplay:
+    description: Screenplay YAML path to render.
+    required: true
+  mode:
+    description: Execution lane.
+    required: false
+    default: scripted_vhs
+  outputs:
+    description: Comma-separated output formats.
+    required: false
+    default: gif
+  output_dir:
+    description: Directory where run artifacts are written.
+    required: false
+    default: outputs
+  upload_artifact:
+    description: Upload run directory as workflow artifact.
+    required: false
+    default: "true"
+  artifact_name:
+    description: Artifact name.
+    required: false
+    default: tds-render-${{ github.run_id }}
+  comment_pr:
+    description: Comment on PR with render result summary.
+    required: false
+    default: "false"
+  python_version:
+    description: Python version for action runtime.
+    required: false
+    default: "3.11"
+
+outputs:
+  run_dir:
+    description: Run directory emitted by tds.
+    value: ${{ steps.render.outputs.run_dir }}
+  media_paths:
+    description: Comma-separated list of media files emitted by tds.
+    value: ${{ steps.render.outputs.media_paths }}
+  status:
+    description: Render status (success|failed).
+    value: ${{ steps.render.outputs.status }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python_version }}
+
+    - name: Set up Go (scripted lane)
+      if: inputs.mode == 'scripted_vhs'
+      uses: actions/setup-go@v5
+      with:
+        go-version: "1.22"
+
+    - name: Install render dependencies (scripted lane, Linux)
+      if: runner.os == 'Linux' && inputs.mode == 'scripted_vhs'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg ttyd
+        go install github.com/charmbracelet/vhs@v0.10.0
+        echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+    - name: Install render dependencies (scripted lane, macOS)
+      if: runner.os == 'macOS' && inputs.mode == 'scripted_vhs'
+      shell: bash
+      run: |
+        brew install ffmpeg ttyd vhs
+
+    - name: Guard unsupported scripted lane on Windows
+      if: runner.os == 'Windows' && inputs.mode == 'scripted_vhs'
+      shell: bash
+      run: |
+        echo "Scripted render in this action currently supports Linux/macOS only."
+        exit 1
+
+    - name: Install terminal-demo-studio
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install .
+
+    - name: Render screenplay
+      id: render
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        formatted_outputs=()
+        IFS=',' read -r -a requested_outputs <<< "${{ inputs.outputs }}"
+        for item in "${requested_outputs[@]}"; do
+          trimmed="$(echo "$item" | xargs)"
+          if [[ -n "$trimmed" ]]; then
+            formatted_outputs+=(--output "$trimmed")
+          fi
+        done
+
+        mkdir -p "${{ inputs.output_dir }}"
+        log_file="$RUNNER_TEMP/tds-render.log"
+
+        set +e
+        tds render "${{ inputs.screenplay }}" \
+          --mode "${{ inputs.mode }}" \
+          --local \
+          --output-dir "${{ inputs.output_dir }}" \
+          "${formatted_outputs[@]}" | tee "$log_file"
+        exit_code=${PIPESTATUS[0]}
+        set -e
+
+        status="$(grep '^STATUS=' "$log_file" | tail -1 | cut -d'=' -f2-)"
+        run_dir="$(grep '^RUN_DIR=' "$log_file" | tail -1 | cut -d'=' -f2-)"
+        media_paths="$(grep '^MEDIA_' "$log_file" | cut -d'=' -f2- | paste -sd ',' -)"
+
+        if [[ -z "$status" ]]; then
+          status="failed"
+        fi
+
+        artifact_name="${{ inputs.artifact_name }}"
+        if [[ "$artifact_name" == "tds-render-${{ github.run_id }}" ]]; then
+          artifact_name="tds-render-${GITHUB_RUN_ID}"
+        fi
+
+        {
+          echo "status=$status"
+          echo "run_dir=$run_dir"
+          echo "media_paths=$media_paths"
+          echo "artifact_name=$artifact_name"
+        } >> "$GITHUB_OUTPUT"
+
+        if [[ $exit_code -ne 0 ]]; then
+          exit $exit_code
+        fi
+
+    - name: Upload render artifact
+      if: inputs.upload_artifact == 'true' && steps.render.outputs.run_dir != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.render.outputs.artifact_name }}
+        path: ${{ steps.render.outputs.run_dir }}
+        if-no-files-found: error
+
+    - name: Comment on pull request
+      if: inputs.comment_pr == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      env:
+        TDS_STATUS: ${{ steps.render.outputs.status }}
+        TDS_RUN_DIR: ${{ steps.render.outputs.run_dir }}
+        TDS_MEDIA_PATHS: ${{ steps.render.outputs.media_paths }}
+        TDS_ARTIFACT_NAME: ${{ steps.render.outputs.artifact_name }}
+      with:
+        script: |
+          const body = [
+            `terminal-demo-studio render: ${process.env.TDS_STATUS}`,
+            `artifact: ${process.env.TDS_ARTIFACT_NAME || "n/a"}`,
+            `run_dir: ${process.env.TDS_RUN_DIR || "n/a"}`,
+            `media: ${process.env.TDS_MEDIA_PATHS || "n/a"}`,
+          ].join("\n");
+
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.payload.pull_request.number,
+            body,
+          });

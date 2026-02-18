@@ -3,11 +3,16 @@ from __future__ import annotations
 import json
 import platform
 import re
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from terminal_demo_studio.adapters import get_adapter
+from terminal_demo_studio.artifacts import (
+    RunLayout,
+    create_run_layout,
+    write_manifest,
+    write_summary,
+)
 from terminal_demo_studio.models import Action, Screenplay, load_screenplay
 from terminal_demo_studio.runtime.events import RuntimeEvent, append_event
 from terminal_demo_studio.runtime.pty_posix import execute_command as execute_posix
@@ -19,17 +24,11 @@ from terminal_demo_studio.runtime.waits import evaluate_wait_condition, wait_sta
 @dataclass(slots=True)
 class AutonomousRunResult:
     success: bool
+    run_layout: RunLayout
+    run_dir: Path
     events_path: Path
     summary_path: Path
     failure_dir: Path | None
-
-
-def _run_path(screenplay_path: Path, output_dir: Path | None) -> Path:
-    base = output_dir.resolve() if output_dir else screenplay_path.resolve().parent
-    run_id = f"{screenplay_path.stem}-{int(time.time())}"
-    path = base / ".terminal_demo_studio_runs" / run_id
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 def _action_name(action: Action) -> str:
@@ -102,11 +101,30 @@ def _unsupported_interactive_reason(action_name: str) -> str:
     )
 
 
-def _write_failure_bundle(run_dir: Path, screen_text: str, reason: str) -> Path:
-    failure_dir = run_dir / "failure"
+def _write_failure_bundle(
+    run_layout: RunLayout,
+    screen_text: str,
+    reason: str,
+    *,
+    step_index: int | None = None,
+    action: str | None = None,
+    scenario: str | None = None,
+) -> Path:
+    failure_dir = run_layout.failure_dir
     failure_dir.mkdir(parents=True, exist_ok=True)
     (failure_dir / "screen.txt").write_text(screen_text, encoding="utf-8")
     (failure_dir / "reason.txt").write_text(reason, encoding="utf-8")
+    if step_index is not None:
+        payload = {
+            "scenario": scenario,
+            "step_index": step_index,
+            "action": action,
+            "reason": reason,
+        }
+        (failure_dir / "step.json").write_text(
+            json.dumps(payload, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return failure_dir
 
 
@@ -116,9 +134,19 @@ def run_autonomous_screenplay(
     screenplay: Screenplay | None = None,
 ) -> AutonomousRunResult:
     loaded = screenplay if screenplay is not None else load_screenplay(screenplay_path)
-    run_dir = _run_path(screenplay_path, output_dir)
-    events_path = run_dir / "events.jsonl"
-    summary_path = run_dir / "summary.json"
+    run_layout = create_run_layout(
+        screenplay_path=screenplay_path,
+        output_dir=output_dir,
+        lane="autonomous_pty",
+    )
+    write_manifest(
+        run_layout,
+        screenplay_path=screenplay_path,
+        command="tds render",
+        mode="autonomous_pty",
+    )
+    events_path = run_layout.runtime_dir / "events.jsonl"
+    summary_path = run_layout.summary_path
     screen = VirtualTerminalScreen()
 
     success = True
@@ -126,6 +154,9 @@ def run_autonomous_screenplay(
     failure_dir: Path | None = None
     last_exit_code: int | None = None
     working_dir = screenplay_path.resolve().parent
+    failed_step_index: int | None = None
+    failed_action: str | None = None
+    failed_scenario: str | None = None
 
     for scenario in loaded.scenarios:
         adapter = get_adapter(scenario.adapter)
@@ -148,6 +179,9 @@ def run_autonomous_screenplay(
             if exit_code != 0:
                 success = False
                 failure_reason = f"setup command failed: {setup_cmd}"
+                failed_step_index = -1
+                failed_action = "setup"
+                failed_scenario = scenario.label
                 break
 
         if not success:
@@ -164,6 +198,9 @@ def run_autonomous_screenplay(
                 detail = action.input or action.key or action.hotkey or ""
                 success = False
                 failure_reason = _unsupported_interactive_reason(action_name)
+                failed_step_index = index
+                failed_action = action_name
+                failed_scenario = scenario.label
             elif action.command or action.type:
                 command = action.command or action.type or ""
                 output, exit_code = _execute(command, cwd=working_dir, shell=scenario.shell)
@@ -175,6 +212,9 @@ def run_autonomous_screenplay(
                     failure_reason = (
                         f"command failed ({command}) with exit code {exit_code}"
                     )
+                    failed_step_index = index
+                    failed_action = action_name
+                    failed_scenario = scenario.label
 
             if action.sleep:
                 wait_stable(action.sleep)
@@ -187,6 +227,9 @@ def run_autonomous_screenplay(
                 if not ok:
                     success = False
                     failure_reason = message
+                    failed_step_index = index
+                    failed_action = action_name
+                    failed_scenario = scenario.label
 
             append_event(
                 events_path,
@@ -207,17 +250,33 @@ def run_autonomous_screenplay(
             break
 
     if not success:
-        failure_dir = _write_failure_bundle(run_dir, screen.snapshot(), failure_reason)
+        failure_dir = _write_failure_bundle(
+            run_layout,
+            screen.snapshot(),
+            failure_reason,
+            step_index=failed_step_index,
+            action=failed_action,
+            scenario=failed_scenario,
+        )
 
-    summary = {
-        "success": success,
+    summary: dict[str, object] = {
+        "run_id": run_layout.run_id,
+        "lane": "autonomous_pty",
+        "status": "success" if success else "failed",
+        "screenplay": str(screenplay_path.resolve()),
         "events": str(events_path),
+        "failed_scenario": failed_scenario,
+        "failed_step_index": failed_step_index,
+        "failed_action": failed_action,
+        "reason": failure_reason if not success else "",
         "failure_dir": str(failure_dir) if failure_dir else None,
     }
-    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    write_summary(run_layout, summary)
 
     return AutonomousRunResult(
         success=success,
+        run_layout=run_layout,
+        run_dir=run_layout.run_dir,
         events_path=events_path,
         summary_path=summary_path,
         failure_dir=failure_dir,

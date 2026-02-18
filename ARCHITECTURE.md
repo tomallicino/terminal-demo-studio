@@ -1,53 +1,84 @@
 # Architecture
 
-`terminal-demo-studio` has two execution lanes that share one output contract: media and diagnostics are always derived from executed sessions.
+`terminal-demo-studio` has three execution lanes with one shared artifact contract.
 
 ## High-Level Flow
 
-1. CLI accepts `run`, `validate`, `new`, `doctor`, and `init`.
-2. `init` creates a starter workspace and screenplay.
-3. Screenplay is loaded, normalized, and interpolated (`tmp_dir` injected automatically).
-4. Run path selection:
-- `scripted_vhs`: compile tape and render via VHS/ffmpeg pipeline.
-- `autonomous_pty`: execute command/assert closed-loop actions and produce run artifacts.
-5. Optional composition step outputs MP4/GIF.
-6. Artifacts are written to output directory and `.terminal_demo_studio_runs/`.
+1. `tds` receives command (`render`, `run`, `new`, `init`, `validate`, `doctor`, `debug`).
+2. Screenplay is loaded and validated (`models.py`) with variable interpolation.
+3. Lane selection is resolved from `--mode` or screenplay scenarios.
+4. Canonical run layout is created (`artifacts.py`).
+5. Lane execution runs and emits media/events/summary/failure artifacts.
+6. CLI prints machine-friendly keys (`STATUS`, `RUN_DIR`, `MEDIA_*`, `SUMMARY`, `EVENTS`).
 
 ## Core Modules
 
-- `terminal_demo_studio/cli.py`: command routing and mode selection.
-- `terminal_demo_studio/models.py`: screenplay schema v2, validation, interpolation inputs.
-- `terminal_demo_studio/tape.py`: VHS tape compilation, key/hotkey/wait support for scripted lane.
-- `terminal_demo_studio/director.py`: scripted lane render orchestration.
-- `terminal_demo_studio/editor.py`: split-screen composition and GIF export.
-  - Header composition is conditional. If labels cannot be rendered, no header inset is reserved.
-- `terminal_demo_studio/runtime/runner.py`: autonomous command/assert execution and artifact emission.
-- `terminal_demo_studio/runtime/waits.py`: wait/assert timing utilities.
-- `terminal_demo_studio/runtime/shells.py`: cross-platform shell command construction.
-- `terminal_demo_studio/adapters/base.py`: adapter interface + built-ins (`generic`, `shell_marked`).
-- `terminal_demo_studio/doctor.py`: local + docker diagnostics.
+- `terminal_demo_studio/cli.py`
+  - command routing, mode policy, local/docker fallback handling.
+- `terminal_demo_studio/models.py`
+  - screenplay schema, validation, interpolation.
+- `terminal_demo_studio/resources.py`
+  - packaged template discovery/loading.
+- `terminal_demo_studio/artifacts.py`
+  - run directory layout + manifest/summary writers.
+- `terminal_demo_studio/tape.py`
+  - VHS tape compiler.
+- `terminal_demo_studio/director.py`
+  - scripted VHS lane orchestration.
+- `terminal_demo_studio/editor.py`
+  - split-screen composition + GIF output + label rendering fallback.
+- `terminal_demo_studio/runtime/runner.py`
+  - `autonomous_pty` command/assert runtime.
+- `terminal_demo_studio/runtime/video_runner.py`
+  - `autonomous_video` runtime for interactive capture (experimental).
+- `terminal_demo_studio/runtime/shells.py`
+  - cross-platform shell launcher logic.
+- `terminal_demo_studio/doctor.py`
+  - mode-aware diagnostics with actionable `NEXT:` guidance.
+- `terminal_demo_studio/docker_runner.py`
+  - optional dockerized execution.
 
-## Execution Modes
+## Execution Lanes
 
-- `--mode scripted_vhs`: deterministic cinematic playback.
-- `--mode autonomous_pty`: closed-loop command/assert execution with assertions/failure bundles.
-- `--mode auto`: inferred from screenplay scenarios.
+### `scripted_vhs` (stable)
 
-Current limit: interactive key/hotkey/input actions are not yet implemented in the autonomous lane.
+- Deterministic playback from compiled tapes.
+- Supports composed multi-pane outputs and showcase-friendly GIF/MP4 assets.
 
-## Run Artifacts
+### `autonomous_pty` (stable, command/assert scope)
 
-Autonomous runs emit:
+- Closed-loop setup/command execution with wait/assert checks.
+- Writes runtime events and failure bundles.
+- Interactive primitives (`input`/`key`/`hotkey`) are currently guarded.
 
-- `events.jsonl`
-- `summary.json`
-- `failure/` with `screen.txt` and `reason.txt` on failure
+### `autonomous_video` (experimental)
 
-## Repository Layout
+- Interactive full-screen capture lane via Kitty + virtual display stack.
+- Intended for complex TUI-style automation with visual output capture.
+- Not promoted as stable in README quickstart.
 
-- Package: `terminal_demo_studio/`
-- Built-in templates: `terminal_demo_studio/templates/`
-- Mock demos: `examples/mock/`
-- Advanced real-tool demos: `examples/real/`
-- Public media: `docs/media/`
+## Canonical Run Artifact Layout
+
+For all lanes:
+
+- `run_dir/manifest.json`
+- `run_dir/summary.json`
+- `run_dir/media/*.gif|*.mp4`
+- `run_dir/scenes/scene_*.mp4` (scripted lane)
+- `run_dir/tapes/scene_*.tape` (scripted lane)
+- `run_dir/runtime/events.jsonl` (autonomous lanes)
+- `run_dir/failure/*` on failure
+
+## Debug Flow
+
+- `tds render/run` prints machine-readable paths.
+- `tds debug <run_dir>` provides compact operator summary.
+- `tds debug <run_dir> --json` emits stable JSON for agent workflows.
+
+## Distribution Surface
+
+- Python package: `terminal_demo_studio`
+- PyPI distribution: `terminal-demo-studio-cli`
+- CLI binary: `tds`
 - Skill: `skills/terminal-demo-studio/SKILL.md`
+- Reusable GitHub Action: `.github/actions/render`

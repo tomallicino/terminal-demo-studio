@@ -1,0 +1,28 @@
+title: "Interactive Menu Showcase"
+output: "interactive_menu_showcase"
+settings:
+  width: 1360
+  height: 840
+  font_size: 22
+  theme: "TokyoNightStorm"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+scenarios:
+  - label: "Menu Flow"
+    surface: "terminal"
+    actions:
+      - type: "echo 'Main Menu'"
+      - type: "echo ' > Render demo'"
+      - type: "echo '   Validate screenplay'"
+      - type: "echo '   Run doctor'"
+      - key: "Down"
+      - type: "echo ' > Validate screenplay'"
+      - key: "Enter"
+      - type: "echo 'validation complete: 0 errors'"
+      - wait_for: "validation complete"
+        wait_mode: "screen"
+        wait_timeout: "6s"
+      - sleep: "800ms"

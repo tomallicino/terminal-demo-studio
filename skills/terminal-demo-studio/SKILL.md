@@ -1,11 +1,11 @@
 ---
 name: terminal-demo-studio
-description: Build deterministic terminal/TUI demos with portable mock defaults and autonomous closed-loop execution for advanced workflows.
+description: Build deterministic terminal demo media with portable mock defaults, canonical run artifacts, and agent-friendly debug outputs.
 ---
 
 # terminal-demo-studio
 
-Create reproducible terminal demo assets that are plug-and-play for agents and users.
+Use this skill to create terminal demos that are reproducible and easy to automate.
 
 ## Install (Remote-First)
 
@@ -13,44 +13,49 @@ Create reproducible terminal demo assets that are plug-and-play for agents and u
 npx skills add tomallicino/terminal-demo-studio --skill terminal-demo-studio
 ```
 
-## Start Here (Portable-First)
-
-Portable mock demos are the default because they are deterministic and cross-platform.
+## Default Onboarding (Portable First)
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
+pipx install terminal-demo-studio-cli
+tds render --template install_first_command --output gif --output-dir outputs
+```
 
-studio init
-studio validate screenplays/getting_started.yaml --explain
-studio run screenplays/getting_started.yaml --mode scripted_vhs --local --output-dir outputs --output gif
+Then inspect output paths from the command response (`RUN_DIR=...`, `MEDIA_GIF=...`).
+
+## Core Workflow
+
+```bash
+tds new demo_case --template before_after_bugfix --destination screenplays
+tds validate screenplays/demo_case.yaml --explain
+tds render screenplays/demo_case.yaml --mode scripted_vhs --local --output gif --output-dir outputs
+tds debug <run_dir>
 ```
 
 ## Modes
 
-1. `scripted_vhs`
-- deterministic cinematic rendering from screenplay actions.
+1. `scripted_vhs` (stable)
+- deterministic cinematic rendering.
+- default for showcase media.
 
-2. `autonomous_pty`
-- closed-loop execution with waits/assertions.
-- writes run artifacts (`events.jsonl`, `summary.json`, and failure bundle on error).
-- command/assert flows are reliable in v1.
-- interactive key/hotkey/input autonomy is specified in `docs/autonomous-roadmap.md` and not release-complete yet.
+2. `autonomous_pty` (stable, command/assert scope)
+- closed-loop command/assert execution with `events.jsonl`, `summary.json`, failure bundles.
+- use for agent verification workflows.
+
+3. Autonomous interactive (`input`/`key`/`hotkey` in runtime lane)
+- experimental and roadmap-tracked in `docs/autonomous-roadmap.md`.
 
 ## Advanced Real-Tool Lane
 
-Use `examples/real/` for optional advanced external-tool sessions.
+Use `examples/real/` only for advanced demos with explicit prerequisites.
 
 Rules:
-
-1. Keep public onboarding and README demos on portable mocks.
-2. Use `--mode autonomous_pty` with explicit waits/assertions.
-3. Treat retries/timeouts as explicit screenplay policy, not hidden runtime behavior.
+1. Keep README/public onboarding on portable mock demos.
+2. Use explicit assertions/waits; do not rely on implicit timing.
+3. Treat retries and timeouts as screenplay policy.
 
 ## Anti-Flake Checklist
 
-1. Prefer explicit `assert_screen_regex` and `wait_screen_regex` markers.
-2. Keep steps short and stateful; avoid giant command chains.
-3. Use portable mocks for default docs and screenshots.
-4. Keep advanced real-tool demos isolated and clearly labeled.
+1. Prefer `assert_screen_regex` and `wait_screen_regex` at key state boundaries.
+2. Keep each action focused; avoid giant chained shell commands.
+3. Preserve deterministic settings (theme, geometry, playback mode).
+4. Use `tds debug --json` for machine-triage loops.

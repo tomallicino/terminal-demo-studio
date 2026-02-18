@@ -1,0 +1,23 @@
+title: "Install and First Command"
+output: "install_first_command"
+settings:
+  width: 1280
+  height: 800
+  font_size: 22
+  theme: "TokyoNightStorm"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+scenarios:
+  - label: "First Run"
+    surface: "terminal"
+    actions:
+      - type: "echo '$ pipx install terminal-demo-studio-cli'"
+      - type: "echo '$ tds render --template install_first_command --output gif --output-dir outputs'"
+      - type: "echo 'GIF ready at outputs/.terminal_demo_studio_runs/.../media/install_first_command.gif'"
+      - wait_for: "GIF ready"
+        wait_mode: "screen"
+        wait_timeout: "5s"
+      - sleep: "800ms"

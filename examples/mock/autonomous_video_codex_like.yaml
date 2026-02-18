@@ -1,0 +1,28 @@
+title: "Autonomous Video Codex-like Mock"
+output: "autonomous_video_codex_like"
+settings:
+  width: 1440
+  height: 900
+  theme: "GruvboxDark"
+  framerate: 30
+scenarios:
+  - label: "Codex-like"
+    execution_mode: "autonomous_video"
+    actions:
+      - command: "python3 ../../fixtures/autonomous_video/mock_codex_like_tui.py"
+      - wait_for: "Connected"
+        wait_mode: "screen"
+        wait_timeout: "20s"
+      - key: "p"
+      - wait_for: "Plan ready"
+        wait_mode: "screen"
+        wait_timeout: "20s"
+      - key: "a"
+      - wait_for: "Patch applied"
+        wait_mode: "screen"
+        wait_timeout: "20s"
+      - key: "q"
+      - wait_for: "Session complete"
+        wait_mode: "screen"
+        wait_timeout: "20s"
+      - sleep: "500ms"

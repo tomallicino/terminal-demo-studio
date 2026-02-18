@@ -1,0 +1,62 @@
+title: "Error Then Fix"
+output: "error_then_fix"
+variables:
+  demo_dir: "{{tmp_dir}}/tds_error_then_fix"
+settings:
+  width: 1400
+  height: 860
+  font_size: 22
+  theme: "GruvboxDark"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+preinstall:
+  - "rm -rf {{demo_dir}} && mkdir -p {{demo_dir}}"
+  - |
+    cat > {{demo_dir}}/app.py <<'PY'
+    import json
+    import sys
+    from pathlib import Path
+
+    config = json.loads(Path("config.json").read_text())
+    timeout = config["timeout"]
+    if timeout <= 0:
+        print("error: timeout must be > 0")
+        sys.exit(1)
+    print(f"starting service with timeout={timeout}")
+    PY
+  - |
+    cat > {{demo_dir}}/config.bad.json <<'JSON'
+    {"timeout": 0}
+    JSON
+  - |
+    cat > {{demo_dir}}/config.good.json <<'JSON'
+    {"timeout": 15}
+    JSON
+scenarios:
+  - label: "Error First"
+    surface: "terminal"
+    setup:
+      - "cd {{demo_dir}}"
+      - "cp config.bad.json config.json"
+      - "clear"
+    actions:
+      - type: "python3 app.py"
+      - wait_for: "error: timeout must be > 0"
+        wait_mode: "screen"
+        wait_timeout: "6s"
+      - sleep: "800ms"
+  - label: "Fixed Config"
+    surface: "terminal"
+    setup:
+      - "cd {{demo_dir}}"
+      - "cp config.good.json config.json"
+      - "clear"
+    actions:
+      - type: "python3 app.py"
+      - wait_for: "starting service with timeout=15"
+        wait_mode: "screen"
+        wait_timeout: "6s"
+      - sleep: "800ms"
