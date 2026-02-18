@@ -13,7 +13,7 @@ pip install "$ROOT_DIR" >/dev/null
 
 cd "$TMP_ROOT"
 studio new --list-templates > templates.txt
-if ! rg -q '^- dev_bugfix$' templates.txt; then
+if ! grep -Eq '^- dev_bugfix$' templates.txt; then
   echo "Installed-context smoke failed: dev_bugfix template not listed"
   cat templates.txt
   exit 1

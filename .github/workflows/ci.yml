@@ -78,7 +78,13 @@ jobs:
         run: |
           choco install ffmpeg --yes --no-progress
           go install github.com/charmbracelet/vhs@v0.10.0
+          $ttydDir = "$env:USERPROFILE\\ttyd"
+          New-Item -ItemType Directory -Path $ttydDir -Force | Out-Null
+          Invoke-WebRequest `
+            -Uri "https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.win32.exe" `
+            -OutFile "$ttydDir\\ttyd.exe"
           "$env:USERPROFILE\go\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "$ttydDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Probe scripted render prerequisites
         shell: bash
