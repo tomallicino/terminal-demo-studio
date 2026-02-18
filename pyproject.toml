@@ -23,7 +23,7 @@ dev = [
 ]
 
 [project.scripts]
-studio = "terminal_demo_studio.cli:main"
+tds = "terminal_demo_studio.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["terminal_demo_studio*"]

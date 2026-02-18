@@ -91,7 +91,8 @@ class Action(BaseModel):
 
 
 class PromptSettings(BaseModel):
-    style: Literal["macos"] = "macos"
+    style: Literal["macos", "venv"] = "macos"
+    env: str | None = None
     user: str = "dev"
     host: str = "workstation"
     path: Literal["basename", "full"] = "basename"
@@ -101,7 +102,9 @@ class PromptSettings(BaseModel):
 class Scenario(BaseModel):
     label: str
     surface: Literal["terminal"] = "terminal"
-    execution_mode: Literal["scripted_vhs", "autonomous_pty"] = "scripted_vhs"
+    execution_mode: Literal["scripted_vhs", "autonomous_pty", "autonomous_video"] = (
+        "scripted_vhs"
+    )
     shell: Literal["auto", "bash", "zsh", "fish", "pwsh", "cmd"] = "auto"
     adapter: str = "generic"
     prompt: PromptSettings | None = None

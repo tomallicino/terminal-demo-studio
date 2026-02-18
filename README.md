@@ -1,16 +1,23 @@
 # terminal-demo-studio
 
-Deterministic terminal/TUI demos for docs, launch pages, and agent workflows.
+Deterministic terminal demo generation for docs, release pages, and agent workflows.
 
-Release status: alpha.
+Built on [Charm VHS](https://github.com/charmbracelet/vhs), with a CI-grade screenplay layer, canonical run artifacts, and executed-session authenticity.
 
-All media is generated from executed sessions (mock or real). No hand-edited frames.
+All showcase media is generated from executed sessions (mock or real), never hand-edited frames.
 
-Built on top of [Charm VHS](https://github.com/charmbracelet/vhs), with a higher-level screenplay pipeline, validation/templates, before/after composition, and autonomous run artifacts.
+## 60-Second Wow Path
 
-![Hero demo: bugfix before/after](docs/media/hero-bugfix-sequential.gif)
+```bash
+pipx install terminal-demo-studio-cli
+tds render --template install_first_command --output gif --output-dir outputs
+```
 
-## Agent Automation First
+![Install and first command](docs/media/install_first_command.gif)
+
+Migration note: the `studio` command was removed in alpha. Use `tds`.
+
+## Agent-First Automation
 
 Install the skill:
 
@@ -18,122 +25,152 @@ Install the skill:
 npx skills add tomallicino/terminal-demo-studio --skill terminal-demo-studio
 ```
 
-Agent-friendly bootstrap:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-
-studio init
-studio validate screenplays/getting_started.yaml --explain
-studio run screenplays/getting_started.yaml --mode scripted_vhs --local --output-dir outputs
-```
-
-Example agent prompt:
+Agent prompt example:
 
 ```text
-Create a portable mock complex-TUI demo, validate it, render it locally, and return the output path plus any failures.
+Render a portable demo template, return RUN_DIR and MEDIA_GIF, then summarize any failures with tds debug --json.
 ```
 
-## 60-Second Quickstart (Docker Optional)
+## Installation
+
+Recommended for users:
+
+```bash
+pipx install terminal-demo-studio-cli
+```
+
+Developer setup:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
-
-studio doctor --mode auto
-studio validate examples/mock/safety_wizard.yaml --explain
-studio run examples/mock/safety_wizard.yaml --mode scripted_vhs --local --output-dir outputs --output gif
 ```
-
-Core workflows are local-first and do not require Docker.
 
 ## Compatibility Matrix
 
-| Platform | `scripted_vhs` lane | `autonomous_pty` lane | Docker |
-| --- | --- | --- | --- |
-| macOS | CI-rendered smoke | CI command/assert smoke | Optional |
-| Linux | CI-rendered smoke | CI command/assert smoke | Optional |
-| Windows 10/11 (native) | Supported, not CI-gated yet (tracked as follow-up) | CI command/assert smoke | Optional |
+| Platform | `scripted_vhs` lane | `autonomous_pty` lane | `autonomous_video` lane | Docker |
+| --- | --- | --- | --- | --- |
+| macOS | Supported (CI smoke) | Supported (CI smoke) | Experimental | Optional |
+| Linux | Supported (CI smoke) | Supported (CI smoke) | Experimental | Optional |
+| Windows 10/11 | Supported for users, CI parity deferred | Supported (CI smoke) | Docker-only path | Optional |
 
-Current autonomous scope: command/assert automation is release-ready. Interactive `input`/`key`/`hotkey` autonomy for complex live TUIs is tracked in `docs/autonomous-roadmap.md`.
+Docker is optional for core workflows.
 
-## Complex TUI Automation
+## Stable vs Experimental
 
-Portable mock demos are the default public showcase because they are deterministic and cross-platform.
-
-Advanced real-tool demos live in `examples/real/` and are intentionally marked advanced:
-
-1. Require extra setup and pinned manifests.
-2. Must include tool version and capture date metadata.
-3. Should be run in `--mode autonomous_pty` with explicit assertions.
-
-## Demo Showcase (Portable-First)
-
-1. Hero before/after bugfix flow (Catppuccin Mocha)  
-Source screenplay: `screenplays/dev_bugfix_workflow.yaml`  
-![Hero bugfix demo](docs/media/hero-bugfix-sequential.gif)
-
-2. Simultaneous playback comparison (GruvboxDark)  
-Source screenplay: `screenplays/agent_generated_release_check.yaml`  
-![Playback simultaneous demo](docs/media/playback-simultaneous.gif)
-
-3. Single-pane macOS prompt flow (Dracula)  
-Source screenplay: `screenplays/single_prompt_macos_demo.yaml`  
-![macOS prompt demo](docs/media/macos-prompt-single-pane.gif)
-
-4. Feature-flag workflow before/after (Nord)  
-Source screenplay: `screenplays/agent_generated_feature_flag_fix.yaml`  
-![Feature flag demo](docs/media/feature-flag-bugfix.gif)
+- Stable: `scripted_vhs` lane (`tds render/run --mode scripted_vhs`).
+- Stable (limited): `autonomous_pty` command/assert lane.
+- Experimental: `autonomous_video` interactive lane and broader autonomous interactive coverage roadmap.
 
 ## Commands
 
 ```bash
-studio init [--destination PATH] [--template TEMPLATE] [--name NAME] [--force]
-studio run <screenplay.yaml> [--mode auto|scripted_vhs|autonomous_pty] \
-  [--docker|--local] [--output-dir PATH] [--keep-temp] [--rebuild] \
-  [--playback sequential|simultaneous] [--output mp4|gif]
-studio validate <screenplay.yaml> [--json-schema] [--explain]
-studio new <name> [--template TEMPLATE] [--destination PATH] [--force]
-studio new --list-templates
-studio doctor [--mode auto|scripted_vhs|autonomous_pty]
+tds render <screenplay.yaml> [--mode auto|scripted_vhs|autonomous_pty|autonomous_video] \
+  [--docker|--local] [--output-dir PATH] [--playback sequential|simultaneous] \
+  [--output gif|mp4]
+
+tds render --template <template_id> [--name NAME] [--destination PATH] \
+  [--mode scripted_vhs] [--local] [--output gif|mp4]
+
+tds run <screenplay.yaml> [same options as render]
+tds validate <screenplay.yaml> [--json-schema] [--explain]
+tds new <name> [--template TEMPLATE] [--destination PATH] [--force]
+tds new --list-templates
+tds init [--destination PATH] [--template TEMPLATE] [--name NAME] [--force]
+tds doctor [--mode auto|scripted_vhs|autonomous_pty|autonomous_video]
+tds debug <run_dir> [--json]
 ```
 
-## What Fails Fast vs Warns
+## Golden Templates (Launch Pack)
 
-1. `studio run --docker` fails if Docker is unavailable.
-2. `studio run` (auto) falls back to local mode if Docker is unavailable.
-3. `studio doctor --mode autonomous_pty` warns for missing render binaries.
-4. `studio doctor --mode scripted_vhs` surfaces render dependency issues with actionable hints.
+Use `tds new --list-templates` to scaffold these six templates:
+
+1. `install_first_command`  
+What it shows: install + first render success.  
+Source: `examples/mock/install_first_command.yaml`  
+![install_first_command](docs/media/install_first_command.gif)
+
+2. `before_after_bugfix`  
+What it shows: two-pane failing-to-passing bugfix narrative.  
+Source: `examples/mock/before_after_bugfix.yaml`  
+![before_after_bugfix](docs/media/before_after_bugfix.gif)
+
+3. `error_then_fix`  
+What it shows: error-first config workflow with deterministic fix.  
+Source: `examples/mock/error_then_fix.yaml`  
+![error_then_fix](docs/media/error_then_fix.gif)
+
+4. `interactive_menu_showcase`  
+What it shows: menu-style interaction sequence with deterministic playback.  
+Source: `examples/mock/interactive_menu_showcase.yaml`  
+![interactive_menu_showcase](docs/media/interactive_menu_showcase.gif)
+
+5. `policy_warning_gate`  
+What it shows: non-compliant vs compliant release gate comparison.  
+Source: `examples/mock/policy_warning_gate.yaml`  
+![policy_warning_gate](docs/media/policy_warning_gate.gif)
+
+6. `speedrun_cuts`  
+What it shows: fast release-gate style command outputs.  
+Source: `examples/mock/speedrun_cuts.yaml`  
+![speedrun_cuts](docs/media/speedrun_cuts.gif)
+
+## Demo-as-Build-Artifact
+
+Every run writes a canonical run directory under `.terminal_demo_studio_runs/`:
+
+- `manifest.json`
+- `summary.json`
+- `media/*.gif|*.mp4`
+- `scenes/scene_*.mp4` (scripted lane)
+- `tapes/scene_*.tape` (scripted lane)
+- `runtime/events.jsonl` (autonomous lanes)
+- `failure/*` on errors
+
+`tds debug <run_dir>` provides compact triage output, and `--json` is agent-friendly.
+
+## Reproducibility Guarantees
+
+Determinism knobs and environment guidance:
+
+- `docs/reproducibility.md`
+
+## GitHub Action (Copy/Paste)
+
+Reusable render action docs:
+
+- `docs/github-action.md`
+- action path: `.github/actions/render`
 
 ## Troubleshooting
 
-1. Missing labels in composed output:
-- Run `studio doctor --mode scripted_vhs` and check label renderer capability.
-- `drawtext` is preferred; Pillow image-overlay fallback is used when `drawtext` is unavailable.
+1. Missing local render dependencies:
 
-2. Docker not running:
-- Use `--local` or start Docker and retry.
+```bash
+tds doctor --mode scripted_vhs
+```
 
-3. Validation errors:
-- Run `studio validate <file> --explain` and fix the exact field path shown.
+2. Docker unavailable for explicit Docker runs:
 
-## Architecture and Specs
+```bash
+tds render ... --local
+```
+
+3. Failed run triage:
+
+```bash
+tds debug <run_dir>
+tds debug <run_dir> --json
+```
+
+## Additional Docs
 
 - `ARCHITECTURE.md`
 - `CAPABILITIES.md`
 - `docs/autonomous-roadmap.md`
 - `docs/case-studies/feature-flag-bugfix.md`
 - `docs/releasing.md`
-
-## Packaging
-
-1. PyPI distribution: `terminal-demo-studio-cli`
-2. Python package: `terminal_demo_studio`
-3. CLI command: `studio`
-4. Skill path: `skills/terminal-demo-studio/SKILL.md`
 
 ## License
 

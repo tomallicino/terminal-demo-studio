@@ -28,8 +28,11 @@ scenarios:
     assert result.success is True
     assert result.events_path.exists()
     assert result.summary_path.exists()
+    assert (result.run_dir / "manifest.json").exists()
+    assert (result.run_dir / "runtime").is_dir()
     summary = json.loads(result.summary_path.read_text(encoding="utf-8"))
-    assert summary["success"] is True
+    assert summary["status"] == "success"
+    assert summary["lane"] == "autonomous_pty"
 
 
 def test_autonomous_runner_writes_failure_bundle(tmp_path: Path) -> None:

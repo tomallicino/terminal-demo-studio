@@ -1,15 +1,37 @@
 FROM ghcr.io/charmbracelet/vhs:v0.10.0
 
-RUN apk add --no-cache \
-    bash \
-    curl \
-    ffmpeg \
-    git \
-    python3 \
-    py3-pip \
-    ttyd \
-    font-jetbrains-mono \
-    nerd-fonts-jetbrains-mono
+RUN if command -v apk >/dev/null 2>&1; then \
+      apk add --no-cache \
+        bash \
+        curl \
+        ffmpeg \
+        git \
+        kitty \
+        python3 \
+        py3-pip \
+        ttyd \
+        xvfb \
+        font-jetbrains-mono \
+        nerd-fonts-jetbrains-mono; \
+    elif command -v apt-get >/dev/null 2>&1; then \
+      apt-get update \
+        -o Acquire::AllowReleaseInfoChange::Suite=true \
+        -o Acquire::AllowReleaseInfoChange::Codename=true \
+        && apt-get install -y --no-install-recommends \
+        bash \
+        curl \
+        ffmpeg \
+        git \
+        kitty \
+        python3 \
+        python3-pip \
+        xvfb \
+        fonts-jetbrains-mono \
+        ca-certificates && \
+      rm -rf /var/lib/apt/lists/*; \
+    else \
+      echo "Unsupported package manager in base image" && exit 1; \
+    fi
 
 WORKDIR /app
 COPY . /app/src

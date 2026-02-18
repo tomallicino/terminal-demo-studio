@@ -122,15 +122,40 @@ def test_run_director_returns_none_for_disabled_outputs(
     monkeypatch.setitem(director._SCENARIO_RENDERERS, "terminal", fake_renderer)
     monkeypatch.setattr(director, "compose_split_screen", fake_compose)
 
-    mp4_path, gif_path = director.run_director(
+    result = director.run_director(
         screenplay_path=screenplay,
         output_dir=tmp_path,
         produce_mp4=False,
         produce_gif=True,
     )
 
-    assert mp4_path is None
-    assert gif_path == tmp_path / "demo.gif"
+    assert result.mp4_path is None
+    assert result.gif_path == result.run_layout.media_dir / "demo.gif"
+
+
+def test_run_director_writes_canonical_artifact_layout(
+    monkeypatch: object, tmp_path: Path
+) -> None:
+    screenplay = tmp_path / "demo.yaml"
+    _write_screenplay(screenplay)
+
+    def fake_renderer(*_: object) -> None:
+        return None
+
+    def fake_compose(**_: object) -> None:
+        return None
+
+    monkeypatch.setitem(director._SCENARIO_RENDERERS, "terminal", fake_renderer)
+    monkeypatch.setattr(director, "compose_split_screen", fake_compose)
+
+    result = director.run_director(screenplay_path=screenplay, output_dir=tmp_path)
+
+    run_dir = result.run_layout.run_dir
+    assert (run_dir / "manifest.json").exists()
+    assert (run_dir / "summary.json").exists()
+    assert (run_dir / "media").is_dir()
+    assert (run_dir / "scenes").is_dir()
+    assert (run_dir / "tapes").is_dir()
 
 
 def test_shell_command_prefers_configured_powershell_on_windows(monkeypatch: object) -> None:

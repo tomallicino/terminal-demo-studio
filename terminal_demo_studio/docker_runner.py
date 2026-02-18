@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
 from pathlib import Path
 from typing import Literal
@@ -8,6 +9,40 @@ from typing import Literal
 
 class DockerError(RuntimeError):
     """Raised when docker operations fail."""
+
+
+def _container_path_to_host(path_value: str, project_root: Path) -> Path:
+    container_root = Path("/workspace")
+    candidate = Path(path_value)
+    if candidate.is_absolute():
+        try:
+            rel = candidate.relative_to(container_root)
+        except ValueError:
+            return candidate
+        return (project_root / rel).resolve()
+    return candidate
+
+
+def _map_workspace_strings(value: object, project_root: Path) -> object:
+    if isinstance(value, str) and value.startswith("/workspace/"):
+        return str(_container_path_to_host(value, project_root))
+    if isinstance(value, list):
+        return [_map_workspace_strings(item, project_root) for item in value]
+    if isinstance(value, dict):
+        return {key: _map_workspace_strings(item, project_root) for key, item in value.items()}
+    return value
+
+
+def _rewrite_summary_paths(summary_path: Path, project_root: Path) -> None:
+    if not summary_path.exists():
+        return
+    try:
+        payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return
+    mapped = _map_workspace_strings(payload, project_root)
+    if mapped != payload:
+        summary_path.write_text(json.dumps(mapped, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _hash_files(base: Path, paths: list[Path]) -> str:
@@ -75,18 +110,26 @@ def ensure_image(project_root: Path, rebuild: bool = False) -> str:
     if not rebuild and _image_exists(image_tag):
         return image_tag
 
-    subprocess.run(
-        [
-            "docker",
-            "build",
-            "-f",
-            str(dockerfile),
-            "-t",
-            image_tag,
-            str(project_root),
-        ],
-        check=True,
-    )
+    try:
+        subprocess.run(
+            [
+                "docker",
+                "build",
+                "-f",
+                str(dockerfile),
+                "-t",
+                image_tag,
+                str(project_root),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        message = (exc.stderr or exc.stdout or str(exc)).strip()
+        if not rebuild and "already exists" in message.lower() and _image_exists(image_tag):
+            return image_tag
+        raise DockerError(message) from exc
     return image_tag
 
 
@@ -96,9 +139,10 @@ def run_in_docker(
     keep_temp: bool = False,
     rebuild: bool = False,
     playback_mode: Literal["sequential", "simultaneous"] = "sequential",
+    run_mode: Literal["scripted_vhs", "autonomous_video"] = "scripted_vhs",
     produce_mp4: bool = True,
     produce_gif: bool = True,
-) -> None:
+) -> dict[str, Path | str | None]:
     project_root = Path(__file__).resolve().parents[1]
     image_tag = ensure_image(project_root, rebuild=rebuild)
 
@@ -115,6 +159,8 @@ def run_in_docker(
         "docker",
         "run",
         "--rm",
+        "--entrypoint",
+        "python3",
         "-v",
         f"{project_root}:/workspace",
         "-w",
@@ -122,12 +168,13 @@ def run_in_docker(
         "-e",
         "TERMINAL_DEMO_STUDIO_IN_CONTAINER=1",
         image_tag,
-        "python3",
         "-m",
         "terminal_demo_studio.cli",
-        "run",
+        "render",
         str(container_screenplay),
         "--local",
+        "--mode",
+        run_mode,
         "--playback",
         playback_mode,
     ]
@@ -148,4 +195,48 @@ def run_in_docker(
     elif produce_gif and not produce_mp4:
         cmd.extend(["--output", "gif"])
 
-    subprocess.run(cmd, check=True)
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="")
+    if result.returncode != 0:
+        message = result.stderr.strip() or result.stdout.strip() or "docker run failed"
+        raise DockerError(message)
+
+    parsed: dict[str, Path | str | None] = {
+        "status": "success",
+        "run_dir": None,
+        "events": None,
+        "summary": None,
+        "media_mp4": None,
+        "media_gif": None,
+    }
+    for line in result.stdout.splitlines():
+        if line.startswith("RUN_DIR="):
+            parsed["run_dir"] = _container_path_to_host(
+                line.removeprefix("RUN_DIR="), project_root
+            )
+        elif line.startswith("EVENTS="):
+            parsed["events"] = _container_path_to_host(
+                line.removeprefix("EVENTS="), project_root
+            )
+        elif line.startswith("SUMMARY="):
+            parsed["summary"] = _container_path_to_host(
+                line.removeprefix("SUMMARY="), project_root
+            )
+        elif line.startswith("MEDIA_MP4="):
+            parsed["media_mp4"] = _container_path_to_host(
+                line.removeprefix("MEDIA_MP4="), project_root
+            )
+        elif line.startswith("MEDIA_GIF="):
+            parsed["media_gif"] = _container_path_to_host(
+                line.removeprefix("MEDIA_GIF="), project_root
+            )
+        elif line.startswith("STATUS="):
+            parsed["status"] = line.removeprefix("STATUS=")
+
+    summary_path = parsed.get("summary")
+    if isinstance(summary_path, Path):
+        _rewrite_summary_paths(summary_path, project_root)
+    return parsed

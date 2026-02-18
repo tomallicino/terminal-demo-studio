@@ -44,7 +44,7 @@ def test_doctor_sanitizes_docker_error_noise(monkeypatch: object) -> None:
     monkeypatch.setattr(
         doctor,
         "_container_binary_check",
-        lambda docker_ok: ("container-binaries", False, "skipped"),
+        lambda docker_ok, mode: ("container-binaries", False, "skipped"),
     )
 
     checks = run_doctor_checks(mode="scripted_vhs")
@@ -81,7 +81,7 @@ def test_doctor_loads_packaged_screenplay_checks_without_repo_layout(
     monkeypatch.setattr(
         doctor,
         "_container_binary_check",
-        lambda docker_ok: ("container-binaries", False, "skipped"),
+        lambda docker_ok, mode: ("container-binaries", False, "skipped"),
     )
 
     checks = run_doctor_checks(mode="scripted_vhs")
@@ -103,3 +103,35 @@ def test_doctor_handles_missing_docker_binary(monkeypatch: object) -> None:
     assert name == "docker-daemon"
     assert ok is False
     assert "Docker CLI not found" in message
+
+
+def test_container_binary_probe_overrides_entrypoint(monkeypatch: object) -> None:
+    captured: dict[str, list[str]] = {}
+
+    def fake_ensure_image(project_root: Path, rebuild: bool) -> str:
+        assert rebuild is False
+        return "terminal-demo-studio:test"
+
+    def fake_run(cmd: list[str], check: bool, capture_output: bool, text: bool) -> _ProcResult:
+        captured["cmd"] = cmd
+        assert check is False
+        assert capture_output is True
+        assert text is True
+        return _ProcResult(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(doctor, "ensure_image", fake_ensure_image)
+    monkeypatch.setattr("terminal_demo_studio.doctor.subprocess.run", fake_run)
+
+    name, ok, message = doctor._container_binary_check(True, mode="scripted_vhs")
+
+    assert name == "container-binaries"
+    assert ok is True
+    assert "drawtext support" in message
+    assert captured["cmd"][:6] == [
+        "docker",
+        "run",
+        "--rm",
+        "--entrypoint",
+        "sh",
+        "terminal-demo-studio:test",
+    ]

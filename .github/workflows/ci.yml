@@ -37,12 +37,12 @@ jobs:
 
       - name: Screenplay smoke validate
         run: |
-          python -m terminal_demo_studio.cli validate screenplays/drift_protection.yaml
-          python -m terminal_demo_studio.cli validate examples/mock/safety_wizard.yaml
+          tds validate examples/mock/install_first_command.yaml
+          tds validate examples/mock/before_after_bugfix.yaml
 
       - name: Autonomous command-lane smoke
         run: |
-          python -m terminal_demo_studio.cli run examples/mock/agent_loop.yaml --mode autonomous_pty --output-dir outputs
+          tds run examples/mock/agent_loop.yaml --mode autonomous_pty --output-dir outputs
 
       - name: Installed-context smoke
         if: runner.os != 'Windows'
@@ -54,7 +54,8 @@ jobs:
         shell: bash
         run: ./scripts/release_preflight.sh
 
-      - name: Setup Go
+      - name: Set up Go
+        if: runner.os != 'Windows'
         uses: actions/setup-go@v5
         with:
           go-version: "1.22"
@@ -63,7 +64,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg ttyd
+          sudo apt-get install -y ffmpeg ttyd kitty xvfb
           go install github.com/charmbracelet/vhs@v0.10.0
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
 
@@ -79,45 +80,71 @@ jobs:
           python - <<'PY'
           import shutil
           import subprocess
-          import sys
 
           required = ["vhs", "ffmpeg", "ffprobe"]
           missing = [name for name in required if shutil.which(name) is None]
           if missing:
-            raise SystemExit(f"missing required scripted render tools: {', '.join(missing)}")
+              raise SystemExit(f"missing required scripted render tools: {', '.join(missing)}")
 
           probe = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-filters"],
-            capture_output=True,
-            text=True,
-            check=False,
+              ["ffmpeg", "-hide_banner", "-filters"],
+              capture_output=True,
+              text=True,
+              check=False,
           )
           text = f"{probe.stdout}\n{probe.stderr}"
           has_drawtext = probe.returncode == 0 and "drawtext" in text
           if has_drawtext:
-            print("scripted render prerequisites ready (drawtext labels)")
+              print("scripted render prerequisites ready (drawtext labels)")
           else:
-            try:
-              from PIL import Image  # noqa: F401
-            except Exception as exc:
-              raise SystemExit(
-                "ffmpeg drawtext unavailable and Pillow label fallback missing"
-              ) from exc
-            print("scripted render prerequisites ready (Pillow label fallback)")
+              try:
+                  from PIL import Image  # noqa: F401
+              except Exception as exc:
+                  raise SystemExit(
+                      "ffmpeg drawtext unavailable and Pillow label fallback missing"
+                  ) from exc
+              print("scripted render prerequisites ready (Pillow label fallback)")
           PY
 
       - name: Portable mock render smoke
         if: runner.os != 'Windows'
         run: |
-          python -m terminal_demo_studio.cli run examples/mock/render_smoke.yaml --mode scripted_vhs --local --output-dir outputs --output gif
+          tds render examples/mock/install_first_command.yaml --mode scripted_vhs --local --output-dir outputs --output gif
 
-      - name: Setup Node
-        if: runner.os == 'Linux'
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Skill smoke checks
+      - name: Autonomous video smoke (Linux)
         if: runner.os == 'Linux'
         run: |
-          npx -y skills add . -l
+          tds run examples/mock/autonomous_video_codex_like.yaml --mode autonomous_video --local --output-dir outputs --output mp4
+          tds run examples/mock/autonomous_video_claude_like.yaml --mode autonomous_video --local --output-dir outputs --output mp4
+
+      - name: Upload autonomous video artifacts
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: autonomous-video-mp4
+          path: outputs/.terminal_demo_studio_runs/*autonomous_video*/media/*.mp4
+          if-no-files-found: error
+
+      - name: README smoke
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./scripts/readme_smoke.sh
+
+      - name: Composite action smoke
+        if: runner.os == 'Linux'
+        id: action_smoke
+        uses: ./.github/actions/render
+        with:
+          screenplay: examples/mock/install_first_command.yaml
+          mode: scripted_vhs
+          outputs: gif
+          output_dir: outputs
+          upload_artifact: false
+          comment_pr: false
+
+      - name: Assert action smoke outputs
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          test "${{ steps.action_smoke.outputs.status }}" = "success"
+          test -n "${{ steps.action_smoke.outputs.run_dir }}"

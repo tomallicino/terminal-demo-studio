@@ -45,10 +45,24 @@ def test_run_in_docker_forwards_playback_mode(monkeypatch: object) -> None:
     def fake_ensure_image(project_root: Path, rebuild: bool = False) -> str:
         return "terminal-demo-studio:test"
 
-    def fake_run(cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
-        assert check is True
+    def fake_run(
+        cmd: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        assert check is False
+        assert capture_output is True
+        assert text is True
         captured["cmd"] = cmd
-        return subprocess.CompletedProcess(args=cmd, returncode=0)
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout=(
+                "STATUS=success\n"
+                "RUN_DIR=/tmp/tds/run\n"
+                "SUMMARY=/tmp/tds/run/summary.json\n"
+                "MEDIA_MP4=/tmp/tds/run/media/demo.mp4\n"
+            ),
+            stderr="",
+        )
 
     monkeypatch.setattr(docker_runner, "ensure_image", fake_ensure_image)
     monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
@@ -56,12 +70,46 @@ def test_run_in_docker_forwards_playback_mode(monkeypatch: object) -> None:
     project_root = Path(docker_runner.__file__).resolve().parents[1]
     screenplay = project_root / "screenplays" / "drift_protection.yaml"
 
-    docker_runner.run_in_docker(screenplay_path=screenplay, playback_mode="simultaneous")
+    result = docker_runner.run_in_docker(screenplay_path=screenplay, playback_mode="simultaneous")
 
     cmd = captured["cmd"]
     assert isinstance(cmd, list)
     assert "--playback" in cmd
     assert cmd[cmd.index("--playback") + 1] == "simultaneous"
+    assert "--mode" in cmd
+    assert cmd[cmd.index("--mode") + 1] == "scripted_vhs"
+    assert result["status"] == "success"
+
+
+def test_run_in_docker_forwards_explicit_run_mode(monkeypatch: object) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_ensure_image(project_root: Path, rebuild: bool = False) -> str:
+        return "terminal-demo-studio:test"
+
+    def fake_run(
+        cmd: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="STATUS=success\nRUN_DIR=/tmp/tds/run\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(docker_runner, "ensure_image", fake_ensure_image)
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    project_root = Path(docker_runner.__file__).resolve().parents[1]
+    screenplay = project_root / "examples" / "mock" / "autonomous_video_codex_like.yaml"
+
+    docker_runner.run_in_docker(screenplay_path=screenplay, run_mode="autonomous_video")
+
+    cmd = captured["cmd"]
+    assert isinstance(cmd, list)
+    assert "--mode" in cmd
+    assert cmd[cmd.index("--mode") + 1] == "autonomous_video"
 
 
 def test_ensure_docker_reachable_raises_clear_error_when_docker_missing(
@@ -74,3 +122,98 @@ def test_ensure_docker_reachable_raises_clear_error_when_docker_missing(
 
     with pytest.raises(docker_runner.DockerError, match="Docker CLI not found"):
         docker_runner.ensure_docker_reachable()
+
+
+def test_run_in_docker_maps_workspace_paths_to_host(monkeypatch: object) -> None:
+    def fake_ensure_image(project_root: Path, rebuild: bool = False) -> str:
+        return "terminal-demo-studio:test"
+
+    def fake_run(
+        cmd: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout=(
+                "STATUS=success\n"
+                "RUN_DIR=/workspace/examples/mock/.terminal_demo_studio_runs/run-123\n"
+                "SUMMARY=/workspace/examples/mock/.terminal_demo_studio_runs/run-123/summary.json\n"
+                "MEDIA_MP4=/workspace/examples/mock/.terminal_demo_studio_runs/run-123/media/demo.mp4\n"
+                "EVENTS=/workspace/examples/mock/.terminal_demo_studio_runs/run-123/runtime/events.jsonl\n"
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(docker_runner, "ensure_image", fake_ensure_image)
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    project_root = Path(docker_runner.__file__).resolve().parents[1]
+    screenplay = project_root / "examples" / "mock" / "autonomous_video_codex_like.yaml"
+
+    result = docker_runner.run_in_docker(screenplay_path=screenplay)
+
+    assert result["run_dir"] == (
+        project_root / "examples/mock/.terminal_demo_studio_runs/run-123"
+    ).resolve()
+    assert result["summary"] == (
+        project_root / "examples/mock/.terminal_demo_studio_runs/run-123/summary.json"
+    ).resolve()
+    assert result["media_mp4"] == (
+        project_root / "examples/mock/.terminal_demo_studio_runs/run-123/media/demo.mp4"
+    ).resolve()
+    assert result["events"] == (
+        project_root / "examples/mock/.terminal_demo_studio_runs/run-123/runtime/events.jsonl"
+    ).resolve()
+
+
+def test_ensure_image_tolerates_already_exists_build_error(
+    monkeypatch: object, tmp_path: Path
+) -> None:
+    image_tag = "terminal-demo-studio:v1-testhash"
+    calls = {"inspect": 0}
+
+    def fake_ensure_docker_reachable() -> None:
+        return None
+
+    def fake_compute_image_tag(project_root: Path) -> str:
+        return image_tag
+
+    def fake_image_exists(tag: str) -> bool:
+        assert tag == image_tag
+        calls["inspect"] += 1
+        # First call (pre-build): image missing. Second call (post-build error): present.
+        return calls["inspect"] >= 2
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["docker", "build"],
+            stderr=(
+                'failed to solve: image '
+                '"docker.io/library/terminal-demo-studio:v1-testhash": already exists'
+            ),
+        )
+
+    monkeypatch.setattr(docker_runner, "ensure_docker_reachable", fake_ensure_docker_reachable)
+    monkeypatch.setattr(docker_runner, "compute_image_tag", fake_compute_image_tag)
+    monkeypatch.setattr(docker_runner, "_image_exists", fake_image_exists)
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+
+    result = docker_runner.ensure_image(tmp_path, rebuild=False)
+    assert result == image_tag
+
+
+def test_rewrite_summary_paths_maps_workspace_prefix(tmp_path: Path) -> None:
+    summary = tmp_path / "summary.json"
+    summary.write_text(
+        '{"events": "/workspace/out/events.jsonl", "media": {"mp4": "/workspace/out/demo.mp4"}}',
+        encoding="utf-8",
+    )
+
+    docker_runner._rewrite_summary_paths(summary, tmp_path)
+    rewritten = summary.read_text(encoding="utf-8")
+
+    assert f'"events": "{(tmp_path / "out/events.jsonl").resolve()}"' in rewritten
+    assert f'"mp4": "{(tmp_path / "out/demo.mp4").resolve()}"' in rewritten

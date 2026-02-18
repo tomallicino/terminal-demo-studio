@@ -140,6 +140,28 @@ def test_accepts_autonomous_action_fields() -> None:
     assert scenario.adapter == "generic"
 
 
+def test_accepts_autonomous_video_execution_mode() -> None:
+    data = {
+        "title": "Video",
+        "output": "demo",
+        "settings": {},
+        "scenarios": [
+            {
+                "label": "Only",
+                "execution_mode": "autonomous_video",
+                "actions": [
+                    {"command": "python3 mock.py"},
+                    {"wait_screen_regex": "Connected"},
+                    {"key": "Enter"},
+                ],
+            }
+        ],
+    }
+
+    parsed = parse_screenplay_data(data)
+    assert parsed.scenarios[0].execution_mode == "autonomous_video"
+
+
 def test_rejects_multiple_action_primitives() -> None:
     data = {
         "title": "Invalid",

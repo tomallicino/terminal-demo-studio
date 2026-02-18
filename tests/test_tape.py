@@ -127,6 +127,26 @@ def test_compile_tape_supports_command_key_and_hotkey_actions() -> None:
     assert "Ctrl+C" in tape
 
 
+def test_compile_tape_supports_venv_prompt_setup() -> None:
+    scenario = Scenario(
+        label="venv",
+        prompt={
+            "style": "venv",
+            "env": ".venv",
+            "user": "dev",
+            "host": "workstation",
+            "path": "basename",
+            "symbol": "$",
+        },
+        actions=[Action(type="pwd")],
+    )
+    settings = Settings()
+
+    tape = compile_tape(scenario, settings, ["scene.mp4"])
+
+    assert "Type \"export PS1='(.venv) dev@workstation ${PWD##*/} $ '\"" in tape
+
+
 def test_compile_tape_splits_multiline_commands_into_safe_lines() -> None:
     scenario = Scenario(
         label="multiline",
