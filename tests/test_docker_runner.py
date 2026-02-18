@@ -217,3 +217,53 @@ def test_rewrite_summary_paths_maps_workspace_prefix(tmp_path: Path) -> None:
 
     assert f'"events": "{(tmp_path / "out/events.jsonl").resolve()}"' in rewritten
     assert f'"mp4": "{(tmp_path / "out/demo.mp4").resolve()}"' in rewritten
+
+
+def test_rewrite_summary_paths_maps_windows_style_workspace_prefix(tmp_path: Path) -> None:
+    summary = tmp_path / "summary_windows.json"
+    summary.write_text(
+        '{"events": "\\\\workspace\\\\out\\\\events.jsonl", '
+        '"media": {"mp4": "\\\\workspace\\\\out\\\\demo.mp4"}}',
+        encoding="utf-8",
+    )
+
+    docker_runner._rewrite_summary_paths(summary, tmp_path)
+    rewritten = summary.read_text(encoding="utf-8")
+
+    assert f'"events": "{(tmp_path / "out/events.jsonl").resolve()}"' in rewritten
+    assert f'"mp4": "{(tmp_path / "out/demo.mp4").resolve()}"' in rewritten
+
+
+def test_run_in_docker_forwards_openai_env_vars(monkeypatch: object) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_ensure_image(project_root: Path, rebuild: bool = False) -> str:
+        return "terminal-demo-studio:test"
+
+    def fake_run(
+        cmd: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="STATUS=success\nRUN_DIR=/tmp/tds/run\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(docker_runner, "ensure_image", fake_ensure_image)
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.invalid")
+    monkeypatch.setenv("OPENAI_ORGANIZATION", "org-test")
+
+    project_root = Path(docker_runner.__file__).resolve().parents[1]
+    screenplay = project_root / "examples" / "mock" / "autonomous_video_codex_like.yaml"
+    docker_runner.run_in_docker(screenplay_path=screenplay)
+
+    cmd = captured["cmd"]
+    assert isinstance(cmd, list)
+    assert "-e" in cmd
+    assert "OPENAI_API_KEY" in cmd
+    assert "OPENAI_BASE_URL" in cmd
+    assert "OPENAI_ORGANIZATION" in cmd

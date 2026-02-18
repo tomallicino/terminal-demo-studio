@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Literal
@@ -12,20 +13,22 @@ class DockerError(RuntimeError):
 
 
 def _container_path_to_host(path_value: str, project_root: Path) -> Path:
-    container_root = Path("/workspace")
-    candidate = Path(path_value)
-    if candidate.is_absolute():
-        try:
-            rel = candidate.relative_to(container_root)
-        except ValueError:
-            return candidate
-        return (project_root / rel).resolve()
-    return candidate
+    normalized = path_value.replace("\\", "/")
+    if normalized == "/workspace":
+        return project_root.resolve()
+    if normalized.startswith("/workspace/"):
+        rel = normalized.removeprefix("/workspace/")
+        rel_parts = [part for part in rel.split("/") if part]
+        return (project_root.joinpath(*rel_parts)).resolve()
+    return Path(path_value)
 
 
 def _map_workspace_strings(value: object, project_root: Path) -> object:
-    if isinstance(value, str) and value.startswith("/workspace/"):
-        return str(_container_path_to_host(value, project_root))
+    if isinstance(value, str):
+        normalized = value.replace("\\", "/")
+        if normalized == "/workspace" or normalized.startswith("/workspace/"):
+            return str(_container_path_to_host(value, project_root))
+        return value
     if isinstance(value, list):
         return [_map_workspace_strings(item, project_root) for item in value]
     if isinstance(value, dict):
@@ -167,17 +170,27 @@ def run_in_docker(
         "/workspace",
         "-e",
         "TERMINAL_DEMO_STUDIO_IN_CONTAINER=1",
-        image_tag,
-        "-m",
-        "terminal_demo_studio.cli",
-        "render",
-        str(container_screenplay),
-        "--local",
-        "--mode",
-        run_mode,
-        "--playback",
-        playback_mode,
     ]
+    if os.environ.get("OPENAI_API_KEY"):
+        cmd.extend(["-e", "OPENAI_API_KEY"])
+    if os.environ.get("OPENAI_BASE_URL"):
+        cmd.extend(["-e", "OPENAI_BASE_URL"])
+    if os.environ.get("OPENAI_ORGANIZATION"):
+        cmd.extend(["-e", "OPENAI_ORGANIZATION"])
+    cmd.extend(
+        [
+            image_tag,
+            "-m",
+            "terminal_demo_studio.cli",
+            "render",
+            str(container_screenplay),
+            "--local",
+            "--mode",
+            run_mode,
+            "--playback",
+            playback_mode,
+        ]
+    )
 
     if output_dir is not None:
         output_abs = output_dir.resolve()

@@ -21,6 +21,10 @@ fi
 
 tds new smoke_case --template install_first_command --destination screenplays >/dev/null
 tds validate screenplays/smoke_case.yaml --explain >/dev/null
-tds render screenplays/smoke_case.yaml --mode scripted_vhs --local --output gif --output-dir outputs >/dev/null
+if command -v vhs >/dev/null 2>&1; then
+  tds render screenplays/smoke_case.yaml --mode scripted_vhs --local --output gif --output-dir outputs >/dev/null
+else
+  echo "Skipping render step in install-context smoke: vhs not available in PATH"
+fi
 
 echo "Installed-context smoke checks passed"
