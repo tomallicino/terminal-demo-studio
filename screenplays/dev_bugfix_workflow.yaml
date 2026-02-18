@@ -14,29 +14,68 @@ settings:
   letter_spacing: 0
 preinstall:
   - "rm -rf {{demo_dir}} && mkdir -p {{demo_dir}}"
-  - "{ echo 'import unittest'; echo 'from mathlib import add'; echo ''; echo 'class AddTests(unittest.TestCase):'; echo '    def test_add(self):'; echo '        self.assertEqual(add(2, 3), 5)'; echo ''; echo \"if __name__ == '__main__':\"; echo '    unittest.main()'; } > {{demo_dir}}/test_mathlib.py"
-  - "{ echo 'def add(a, b):'; echo '    return a + b'; } > {{demo_dir}}/mathlib.py"
-  - "cd {{demo_dir}} && git init -q && git config user.email demo@local && git config user.name Demo && git add . && git commit -qm 'chore: seed demo'"
+  - |
+    cat > {{demo_dir}}/mathlib_after.py <<'PY'
+    def add(a, b):
+        return a + b
+
+    def multiply(a, b):
+        return a * b
+    PY
+  - |
+    cat > {{demo_dir}}/mathlib_before.py <<'PY'
+    def add(a, b):
+        # regression introduced during refactor
+        return a - b
+
+    def multiply(a, b):
+        return a * b
+    PY
+  - "cp {{demo_dir}}/mathlib_after.py {{demo_dir}}/mathlib.py"
+  - |
+    cat > {{demo_dir}}/test_mathlib.py <<'PY'
+    import unittest
+    from mathlib import add, multiply
+
+    class MathTests(unittest.TestCase):
+        def test_add(self):
+            self.assertEqual(add(2, 3), 5)
+
+        def test_multiply(self):
+            self.assertEqual(multiply(4, 3), 12)
+
+    if __name__ == '__main__':
+        unittest.main()
+    PY
+  - |
+    cat > {{demo_dir}}/summarize_add.py <<'PY'
+    from mathlib import add
+
+    print(f"add_2_3={add(2, 3)} expected=5")
+    PY
+  - "cd {{demo_dir}} && git init -q && git config user.email demo@local && git config user.name Demo && git add . && git commit -qm 'chore: seed math module'"
 scenarios:
   - label: "Before Fix"
     surface: "terminal"
     setup:
       - "cd {{demo_dir}}"
-      - "{ echo 'def add(a, b):'; echo '    return a - b'; } > mathlib.py"
+      - "cp mathlib_before.py mathlib.py"
     actions:
       - type: "cd {{demo_dir}}"
+      - type: "git log --oneline -n 2"
       - type: "git status -sb"
       - type: "git diff -- mathlib.py"
       - type: "python3 -m unittest -q"
       - wait_for: "FAIL:"
         wait_mode: "screen"
         wait_timeout: "8s"
+      - type: "python3 summarize_add.py"
       - sleep: "1200ms"
   - label: "After Fix"
     surface: "terminal"
     setup:
       - "cd {{demo_dir}}"
-      - "{ echo 'def add(a, b):'; echo '    return a + b'; } > mathlib.py"
+      - "cp mathlib_after.py mathlib.py"
     actions:
       - type: "cd {{demo_dir}}"
       - type: "git status -sb"
@@ -45,4 +84,5 @@ scenarios:
       - wait_for: "OK"
         wait_mode: "screen"
         wait_timeout: "8s"
+      - type: "python3 summarize_add.py"
       - sleep: "1200ms"

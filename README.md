@@ -41,7 +41,7 @@ pip install -e '.[dev]'
 
 studio doctor --mode auto
 studio validate examples/mock/safety_wizard.yaml --explain
-studio run examples/mock/safety_wizard.yaml --mode scripted_vhs --local --output-dir outputs --no-mp4
+studio run examples/mock/safety_wizard.yaml --mode scripted_vhs --local --output-dir outputs --output gif
 ```
 
 Core workflows are local-first and do not require Docker.
@@ -90,7 +90,7 @@ Source screenplay: `screenplays/agent_generated_feature_flag_fix.yaml`
 studio init [--destination PATH] [--template TEMPLATE] [--name NAME] [--force]
 studio run <screenplay.yaml> [--mode auto|scripted_vhs|autonomous_pty] \
   [--docker|--local] [--output-dir PATH] [--keep-temp] [--rebuild] \
-  [--playback sequential|simultaneous] [--no-mp4] [--no-gif]
+  [--playback sequential|simultaneous] [--output mp4|gif]
 studio validate <screenplay.yaml> [--json-schema] [--explain]
 studio new <name> [--template TEMPLATE] [--destination PATH] [--force]
 studio new --list-templates

@@ -1,0 +1,21 @@
+title: "Scripted Render Smoke"
+output: "render_smoke"
+settings:
+  width: 1280
+  height: 720
+  font_size: 22
+  theme: "TokyoNightStorm"
+  padding: 24
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.15
+  letter_spacing: 0
+scenarios:
+  - label: "Render Smoke"
+    surface: "terminal"
+    actions:
+      - type: "echo render smoke"
+      - wait_for: "render smoke"
+        wait_mode: "screen"
+        wait_timeout: "5s"
+      - sleep: "600ms"

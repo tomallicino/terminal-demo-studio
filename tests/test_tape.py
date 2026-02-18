@@ -125,3 +125,20 @@ def test_compile_tape_supports_command_key_and_hotkey_actions() -> None:
     assert "Enter" in tape
     assert "Tab" in tape
     assert "Ctrl+C" in tape
+
+
+def test_compile_tape_splits_multiline_commands_into_safe_lines() -> None:
+    scenario = Scenario(
+        label="multiline",
+        setup=["echo setup-one\necho setup-two"],
+        actions=[Action(command="echo action-one\necho action-two")],
+    )
+    settings = Settings()
+
+    tape = compile_tape(scenario, settings, ["scene.mp4"])
+
+    assert "Type \"echo setup-one\"" in tape
+    assert "Type \"echo setup-two\"" in tape
+    assert "Type \"echo action-one\"" in tape
+    assert "Type \"echo action-two\"" in tape
+    assert "setup-one\\necho setup-two" not in tape
