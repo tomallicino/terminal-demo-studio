@@ -12,7 +12,7 @@
 
 ## Toolchain Knobs
 
-- Python package version (`terminal-demo-studio-cli`)
+- Python package version (`terminal-demo-studio`)
 - VHS version (`v0.10.0` recommended)
 - FFmpeg/FFprobe availability and drawtext support
 - Pillow fallback for label rendering when drawtext is missing

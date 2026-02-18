@@ -78,7 +78,7 @@ For all lanes:
 ## Distribution Surface
 
 - Python package: `terminal_demo_studio`
-- PyPI distribution: `terminal-demo-studio-cli`
+- PyPI distribution: `terminal-demo-studio`
 - CLI binary: `tds`
 - Skill: `skills/terminal-demo-studio/SKILL.md`
 - Reusable GitHub Action: `.github/actions/render`

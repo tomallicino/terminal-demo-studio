@@ -2,7 +2,7 @@
 
 ## PyPI Trusted Publisher Setup
 
-1. Create PyPI project: `terminal-demo-studio-cli`.
+1. Create PyPI project: `terminal-demo-studio`.
 2. Add trusted publisher:
    - Owner: `tomallicino`
    - Repo: `terminal-demo-studio`
@@ -54,6 +54,6 @@ After publish completes:
 
 ```bash
 python -m pip install --upgrade pip
-pip install terminal-demo-studio-cli
+pip install terminal-demo-studio
 tds render --template install_first_command --output gif --output-dir outputs
 ```

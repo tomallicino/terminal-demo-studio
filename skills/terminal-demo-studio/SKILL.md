@@ -16,7 +16,7 @@ npx skills add tomallicino/terminal-demo-studio --skill terminal-demo-studio
 ## Default Onboarding (Portable First)
 
 ```bash
-pipx install terminal-demo-studio-cli
+pipx install terminal-demo-studio
 tds render --template install_first_command --output gif --output-dir outputs
 ```
 

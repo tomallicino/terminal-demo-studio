@@ -14,7 +14,7 @@ scenarios:
   - label: "First Run"
     surface: "terminal"
     actions:
-      - type: "echo '$ pipx install terminal-demo-studio-cli'"
+      - type: "echo '$ pipx install terminal-demo-studio'"
       - type: "echo '$ tds render --template install_first_command --output gif --output-dir outputs'"
       - type: "echo 'GIF ready at outputs/.terminal_demo_studio_runs/.../media/install_first_command.gif'"
       - wait_for: "GIF ready"
