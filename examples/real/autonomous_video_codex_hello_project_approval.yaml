@@ -1,0 +1,52 @@
+title: "Autonomous Video Real Codex Hello Project Approval"
+output: "autonomous_video_real_codex_hello_project_approval"
+settings:
+  width: 1440
+  height: 900
+  theme: "GruvboxDark"
+  framerate: 30
+scenarios:
+  - label: "Codex Project Build (Approval)"
+    execution_mode: "autonomous_video"
+    agent_prompts:
+      mode: "approve"
+      prompt_regex: "Press enter to confirm or esc to cancel"
+      allow_regex: "hello_real_project|README\\.md|main\\.py|sha256sum|mkdir|printf|cat|python3|echo|touch|grep|test"
+      allowed_command_prefixes:
+        - "mkdir "
+        - "cat "
+        - "grep "
+        - "python3 "
+        - "printf "
+        - "echo "
+        - "touch "
+        - "test "
+      max_rounds: 8
+    setup:
+      - "if [ -n \"${OPENAI_API_KEY:-}\" ]; then printf \"%s\" \"$OPENAI_API_KEY\" | codex login --with-api-key >/dev/null 2>&1 || true; fi"
+      - "rm -rf /workspace/examples/real/codex_demo_workspace/hello_real_project"
+    actions:
+      - command: "codex -a on-request -s workspace-write"
+      - sleep: "2s"
+      - input: "Create /workspace/examples/real/codex_demo_workspace/hello_real_project with README.md and main.py. main.py must print exactly: Hello from autonomous Codex demo. README.md must include heading '# Hello Real Project' and command 'python3 main.py'. Use shell commands, and after finishing output only the SHA-256 of the exact lowercase string tds-hello-created."
+      - key: "enter"
+      - wait_for: "2d78d934c4c964425a750c7c34bcef4589329432fac7edb0eb0fe7d43b220ca6"
+        wait_mode: "line"
+        wait_timeout: "180s"
+      - sleep: "1s"
+  - label: "Independent Project Verification"
+    execution_mode: "autonomous_video"
+    actions:
+      - command: "test -f /workspace/examples/real/codex_demo_workspace/hello_real_project/main.py && test -f /workspace/examples/real/codex_demo_workspace/hello_real_project/README.md && printf '%s\\n' 'TDS_FILES_OK'"
+      - wait_for: "^TDS_FILES_OK$"
+        wait_mode: "line"
+        wait_timeout: "30s"
+      - command: "python3 /workspace/examples/real/codex_demo_workspace/hello_real_project/main.py"
+      - wait_for: "^Hello from autonomous Codex demo\\.?$"
+        wait_mode: "line"
+        wait_timeout: "30s"
+      - command: "grep -n \"^# Hello Real Project$\" /workspace/examples/real/codex_demo_workspace/hello_real_project/README.md && grep -n \"python3 main.py\" /workspace/examples/real/codex_demo_workspace/hello_real_project/README.md && printf '%s\\n' 'TDS_README_OK'"
+      - wait_for: "^TDS_README_OK$"
+        wait_mode: "line"
+        wait_timeout: "30s"
+      - sleep: "1s"

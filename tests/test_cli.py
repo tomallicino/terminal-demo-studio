@@ -132,6 +132,115 @@ def test_console_entrypoint_is_tds_only() -> None:
     assert 'studio = "terminal_demo_studio.cli:main"' not in text
 
 
+def test_lint_passes_for_safe_autonomous_video_policy(tmp_path: Path) -> None:
+    screenplay = tmp_path / "demo.yaml"
+    screenplay.write_text(
+        """
+title: Demo
+output: demo
+settings: {}
+agent_prompts:
+  mode: approve
+  allow_regex: 'workspace|README\\.md'
+  allowed_command_prefixes:
+    - "mkdir "
+    - "cat "
+scenarios:
+  - label: Left
+    execution_mode: autonomous_video
+    actions:
+      - command: codex -a on-request -s workspace-write
+""",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["lint", str(screenplay)])
+
+    assert result.exit_code == 0
+    assert "STATUS=pass" in result.output
+    assert "ERRORS=0" in result.output
+
+
+def test_lint_fails_for_unsupported_expect_exit_code_in_autonomous_video(tmp_path: Path) -> None:
+    screenplay = tmp_path / "demo.yaml"
+    screenplay.write_text(
+        """
+title: Demo
+output: demo
+settings: {}
+scenarios:
+  - label: Left
+    execution_mode: autonomous_video
+    actions:
+      - command: codex -a on-request -s workspace-write
+      - expect_exit_code: 0
+""",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["lint", str(screenplay)])
+
+    assert result.exit_code != 0
+    assert "autonomous-video-expect-exit-code" in result.output
+    assert "STATUS=fail" in result.output
+
+
+def test_lint_json_outputs_machine_readable_payload(tmp_path: Path) -> None:
+    screenplay = tmp_path / "demo.yaml"
+    screenplay.write_text(
+        """
+title: Demo
+output: demo
+settings: {}
+agent_prompts:
+  mode: approve
+  allow_regex: ".*"
+scenarios:
+  - label: Left
+    execution_mode: autonomous_video
+    actions:
+      - command: codex -a on-request -s workspace-write
+""",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["lint", str(screenplay), "--json"])
+
+    assert result.exit_code != 0
+    payload = json.loads(result.output)
+    assert payload["status"] == "fail"
+    assert payload["errors"] >= 1
+
+
+def test_lint_reports_validation_error_cleanly(tmp_path: Path) -> None:
+    screenplay = tmp_path / "demo.yaml"
+    screenplay.write_text(
+        """
+title: Demo
+output: demo
+settings: {}
+agent_prompts:
+  mode: approve
+  allow_regex: "[unterminated"
+scenarios:
+  - label: Left
+    execution_mode: autonomous_video
+    actions:
+      - command: codex -a on-request -s workspace-write
+""",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["lint", str(screenplay)])
+
+    assert result.exit_code != 0
+    assert "allow_regex is not a valid regex" in result.output
+
+
 def test_new_creates_screenplay_file(tmp_path: Path) -> None:
     runner = CliRunner()
 
@@ -207,10 +316,33 @@ def test_render_local_dispatches_to_director(monkeypatch: object, tmp_path: Path
     assert result.exit_code == 0
     assert called["screenplay_path"] == screenplay
     assert called["playback_mode"] == "sequential"
+    assert called["media_redaction_mode"] == "auto"
     assert called["produce_mp4"] is True
     assert called["produce_gif"] is True
     assert "STATUS=success" in result.output
     assert "RUN_DIR=" in result.output
+
+
+def test_render_local_forwards_explicit_redact_mode(monkeypatch: object, tmp_path: Path) -> None:
+    screenplay = tmp_path / "demo.yaml"
+    _write_scripted_screenplay(screenplay)
+
+    called: dict[str, object] = {}
+
+    def fake_run_director(**kwargs: object) -> ScriptedRunResult:
+        called.update(kwargs)
+        return _fake_scripted_result(tmp_path)
+
+    monkeypatch.setattr(cli, "run_director", fake_run_director)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        ["render", str(screenplay), "--local", "--redact", "input_line"],
+    )
+
+    assert result.exit_code == 0
+    assert called["media_redaction_mode"] == "input_line"
 
 
 def test_render_output_option_limits_artifacts(monkeypatch: object, tmp_path: Path) -> None:
@@ -379,8 +511,142 @@ def test_run_autonomous_video_mode_invokes_video_runner(
 
     assert result.exit_code == 0
     assert called["screenplay_path"] == screenplay
+    assert called["agent_prompt_mode"] == "auto"
+    assert called["media_redaction_mode"] == "auto"
     assert "MEDIA_MP4=" in result.output
     assert "EVENTS=" in result.output
+
+
+def test_run_visual_alias_invokes_autonomous_video_runner(
+    monkeypatch: object, tmp_path: Path
+) -> None:
+    screenplay = tmp_path / "demo.yaml"
+    _write_autonomous_video_screenplay(screenplay)
+
+    called: dict[str, object] = {}
+
+    def fake_run_video(**kwargs: object) -> object:
+        called.update(kwargs)
+        layout = create_run_layout(
+            screenplay_path=screenplay,
+            output_dir=tmp_path / "outputs",
+            lane="autonomous_video",
+        )
+
+        class _Result:
+            success = True
+            run_dir = layout.run_dir
+            events_path = layout.runtime_dir / "events.jsonl"
+            summary_path = layout.summary_path
+            failure_dir = None
+            mp4_path = layout.media_dir / "demo.mp4"
+            gif_path = layout.media_dir / "demo.gif"
+
+        return _Result()
+
+    monkeypatch.setattr(cli, "missing_local_video_dependencies", lambda: [])
+    monkeypatch.setattr(cli, "run_autonomous_video_screenplay", fake_run_video)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["run", str(screenplay), "--mode", "visual"])
+
+    assert result.exit_code == 0
+    assert called["screenplay_path"] == screenplay
+    assert "STATUS=success" in result.output
+
+
+def test_run_autonomous_video_forwards_agent_prompt_mode(
+    monkeypatch: object, tmp_path: Path
+) -> None:
+    screenplay = tmp_path / "demo.yaml"
+    _write_autonomous_video_screenplay(screenplay)
+
+    called: dict[str, object] = {}
+
+    def fake_run_video(**kwargs: object) -> object:
+        called.update(kwargs)
+        layout = create_run_layout(
+            screenplay_path=screenplay,
+            output_dir=tmp_path / "outputs",
+            lane="autonomous_video",
+        )
+
+        class _Result:
+            success = True
+            run_dir = layout.run_dir
+            events_path = layout.runtime_dir / "events.jsonl"
+            summary_path = layout.summary_path
+            failure_dir = None
+            mp4_path = layout.media_dir / "demo.mp4"
+            gif_path = layout.media_dir / "demo.gif"
+
+        return _Result()
+
+    monkeypatch.setattr(cli, "missing_local_video_dependencies", lambda: [])
+    monkeypatch.setattr(cli, "run_autonomous_video_screenplay", fake_run_video)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        [
+            "run",
+            str(screenplay),
+            "--mode",
+            "autonomous_video",
+            "--agent-prompts",
+            "approve",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert called["agent_prompt_mode"] == "approve"
+
+
+def test_run_autonomous_video_forwards_redact_mode(
+    monkeypatch: object, tmp_path: Path
+) -> None:
+    screenplay = tmp_path / "demo.yaml"
+    _write_autonomous_video_screenplay(screenplay)
+
+    called: dict[str, object] = {}
+
+    def fake_run_video(**kwargs: object) -> object:
+        called.update(kwargs)
+        layout = create_run_layout(
+            screenplay_path=screenplay,
+            output_dir=tmp_path / "outputs",
+            lane="autonomous_video",
+        )
+
+        class _Result:
+            success = True
+            run_dir = layout.run_dir
+            events_path = layout.runtime_dir / "events.jsonl"
+            summary_path = layout.summary_path
+            failure_dir = None
+            mp4_path = layout.media_dir / "demo.mp4"
+            gif_path = layout.media_dir / "demo.gif"
+
+        return _Result()
+
+    monkeypatch.setattr(cli, "missing_local_video_dependencies", lambda: [])
+    monkeypatch.setattr(cli, "run_autonomous_video_screenplay", fake_run_video)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        [
+            "run",
+            str(screenplay),
+            "--mode",
+            "autonomous_video",
+            "--redact",
+            "input_line",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert called["media_redaction_mode"] == "input_line"
 
 
 def test_run_autonomous_video_auto_falls_back_to_docker_when_local_missing(
@@ -410,6 +676,7 @@ def test_run_autonomous_video_auto_falls_back_to_docker_when_local_missing(
 
     assert result.exit_code == 0
     assert called["run_mode"] == "autonomous_video"
+    assert called["media_redaction_mode"] == "auto"
     assert "MEDIA_MP4=" in result.output
 
 
@@ -498,6 +765,23 @@ def test_doctor_command_reports_pass(monkeypatch: object) -> None:
 
     assert result.exit_code == 0
     assert "PASS docker: ok" in result.output
+
+
+def test_doctor_accepts_visual_alias(monkeypatch: object) -> None:
+    called: dict[str, str] = {}
+
+    def fake_doctor(mode: str = "auto") -> list[tuple[str, bool, str]]:
+        called["mode"] = mode
+        return [("autonomous-video-runtime", True, "ready")]
+
+    monkeypatch.setattr(cli, "run_doctor_checks", fake_doctor)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["doctor", "--mode", "visual"])
+
+    assert result.exit_code == 0
+    assert called["mode"] == "autonomous_video"
+    assert "PASS autonomous-video-runtime: ready" in result.output
 
 
 def test_doctor_treats_docker_failures_as_warning(monkeypatch: object) -> None:

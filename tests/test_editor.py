@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 import terminal_demo_studio.editor as editor
@@ -42,6 +43,30 @@ def test_compose_runs_mp4_and_gif_ffmpeg_commands(tmp_path: Path) -> None:
     assert calls[1][0] == "ffmpeg"
     assert "palettegen" in " ".join(calls[1])
     assert str(out_gif) in calls[1]
+
+
+def test_compose_can_skip_gif_generation(tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], check: bool) -> None:
+        assert check is True
+        calls.append(cmd)
+
+    left = tmp_path / "left.mp4"
+    out_mp4 = tmp_path / "out.mp4"
+
+    compose_split_screen(
+        [left],
+        ["Only"],
+        out_mp4,
+        None,
+        run_cmd=fake_run,
+        probe_duration=lambda _: 2.5,
+    )
+
+    assert len(calls) == 1
+    assert calls[0][0] == "ffmpeg"
+    assert str(out_mp4) in calls[0]
 
 
 def test_compose_simultaneous_mode_does_not_delay_inputs(tmp_path: Path) -> None:
@@ -201,6 +226,43 @@ def test_drawtext_detection_returns_false_when_ffmpeg_missing(monkeypatch: objec
     monkeypatch.setattr(editor.subprocess, "run", _raise)
 
     assert editor._detect_drawtext_support() is False
+
+
+def test_compose_applies_input_line_redaction_filter(tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], check: bool) -> None:
+        assert check is True
+        calls.append(cmd)
+
+    left = tmp_path / "left.mp4"
+    out_mp4 = tmp_path / "out.mp4"
+
+    compose_split_screen(
+        [left],
+        ["One"],
+        out_mp4,
+        None,
+        run_cmd=fake_run,
+        probe_duration=lambda _: 2.5,
+        redaction_mode="input_line",
+    )
+
+    filter_value = _extract_filter_complex(calls[0])
+    assert "drawbox=x=0" in filter_value
+    assert "ih-max(96\\,ih*0.12)" in filter_value
+
+
+def test_compose_rejects_invalid_redaction_mode(tmp_path: Path) -> None:
+    left = tmp_path / "left.mp4"
+    with pytest.raises(ValueError, match="Unsupported redaction mode"):
+        compose_split_screen(
+            [left],
+            ["One"],
+            tmp_path / "out.mp4",
+            None,
+            redaction_mode="invalid",  # type: ignore[arg-type]
+        )
 
 
 def test_render_label_badge_respects_max_width(tmp_path: Path) -> None:

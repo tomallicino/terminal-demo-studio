@@ -13,7 +13,9 @@ from pydantic import ValidationError
 from terminal_demo_studio.director import ScriptedRunResult, run_director
 from terminal_demo_studio.docker_runner import DockerError, run_in_docker
 from terminal_demo_studio.doctor import run_doctor_checks
+from terminal_demo_studio.linting import lint_screenplay
 from terminal_demo_studio.models import Screenplay, format_validation_error, load_screenplay
+from terminal_demo_studio.redaction import MediaRedactionMode
 from terminal_demo_studio.resources import list_template_names, read_template
 from terminal_demo_studio.runtime.runner import AutonomousRunResult, run_autonomous_screenplay
 from terminal_demo_studio.runtime.video_runner import (
@@ -25,10 +27,51 @@ from terminal_demo_studio.runtime.video_runner import (
 
 PlaybackMode = Literal["sequential", "simultaneous"]
 RunMode = Literal["auto", "scripted_vhs", "autonomous_pty", "autonomous_video"]
+AgentPromptMode = Literal["auto", "manual", "approve", "deny"]
+DoctorMode = RunMode
+
+_RUN_MODE_ALIASES: dict[str, RunMode] = {
+    "auto": "auto",
+    "scripted": "scripted_vhs",
+    "scripted_vhs": "scripted_vhs",
+    "interactive": "autonomous_pty",
+    "autonomous_pty": "autonomous_pty",
+    "visual": "autonomous_video",
+    "video": "autonomous_video",
+    "autonomous_video": "autonomous_video",
+}
 
 
 def _list_templates() -> list[str]:
     return list_template_names()
+
+
+def _normalize_run_mode(value: str) -> RunMode:
+    normalized = value.strip().lower()
+    resolved = _RUN_MODE_ALIASES.get(normalized)
+    if resolved is None:
+        supported = ", ".join(sorted(_RUN_MODE_ALIASES))
+        raise click.ClickException(f"Unsupported mode '{value}'. Try one of: {supported}")
+    return resolved
+
+
+def _normalize_agent_prompt_mode(value: str) -> AgentPromptMode:
+    normalized = value.strip().lower()
+    if normalized not in {"auto", "manual", "approve", "deny"}:
+        raise click.ClickException(
+            f"Unsupported --agent-prompts value '{value}'. "
+            "Try one of: auto, manual, approve, deny"
+        )
+    return cast(AgentPromptMode, normalized)
+
+
+def _normalize_redact_mode(value: str) -> MediaRedactionMode:
+    normalized = value.strip().lower()
+    if normalized not in {"auto", "off", "input_line"}:
+        raise click.ClickException(
+            f"Unsupported --redact value '{value}'. Try one of: auto, off, input_line"
+        )
+    return cast(MediaRedactionMode, normalized)
 
 
 def _write_screenplay_from_template(
@@ -56,8 +99,9 @@ def _write_screenplay_from_template(
 
 
 def _resolve_run_mode(screenplay: Path, requested_mode: str) -> RunMode:
-    if requested_mode != "auto":
-        return cast(RunMode, requested_mode)
+    normalized_mode = _normalize_run_mode(requested_mode)
+    if normalized_mode != "auto":
+        return normalized_mode
     loaded = load_screenplay(screenplay)
     if any(s.execution_mode == "autonomous_video" for s in loaded.scenarios):
         return "autonomous_video"
@@ -106,6 +150,8 @@ def _run_local_or_autonomous(
     produce_mp4: bool,
     produce_gif: bool,
     resolved_mode: RunMode,
+    agent_prompt_mode: AgentPromptMode,
+    media_redact_mode: MediaRedactionMode,
 ) -> None:
     if resolved_mode == "autonomous_pty":
         auto_result: AutonomousRunResult = run_autonomous_screenplay(
@@ -135,6 +181,8 @@ def _run_local_or_autonomous(
             playback_mode=playback_mode,
             produce_mp4=produce_mp4,
             produce_gif=produce_gif,
+            agent_prompt_mode=agent_prompt_mode,
+            media_redaction_mode=media_redact_mode,
         )
         _emit_result(
             status="success" if video_result.success else "failed",
@@ -160,6 +208,7 @@ def _run_local_or_autonomous(
         playback_mode=playback_mode,
         produce_mp4=produce_mp4,
         produce_gif=produce_gif,
+        media_redaction_mode=media_redact_mode,
     )
     _emit_result(
         status="success" if scripted_result.success else "failed",
@@ -180,9 +229,13 @@ def _execute_render(
     playback_mode: str,
     output_formats: tuple[str, ...],
     run_mode: str,
+    agent_prompt_mode: str,
+    media_redact_mode: str,
 ) -> None:
     produce_mp4, produce_gif = _resolve_outputs(output_formats)
     resolved_mode = _resolve_run_mode(screenplay, run_mode)
+    resolved_prompt_mode = _normalize_agent_prompt_mode(agent_prompt_mode)
+    resolved_redact_mode = _normalize_redact_mode(media_redact_mode)
     in_container = os.environ.get("TERMINAL_DEMO_STUDIO_IN_CONTAINER") == "1"
     auto_mode = use_docker is None
 
@@ -195,6 +248,8 @@ def _execute_render(
             produce_mp4=produce_mp4,
             produce_gif=produce_gif,
             resolved_mode=resolved_mode,
+            agent_prompt_mode=resolved_prompt_mode,
+            media_redact_mode=resolved_redact_mode,
         )
         return
 
@@ -212,6 +267,8 @@ def _execute_render(
                 produce_mp4=produce_mp4,
                 produce_gif=produce_gif,
                 resolved_mode=resolved_mode,
+                agent_prompt_mode=resolved_prompt_mode,
+                media_redact_mode=resolved_redact_mode,
             )
             return
         if use_docker is True:
@@ -225,6 +282,8 @@ def _execute_render(
                     run_mode="autonomous_video",
                     produce_mp4=produce_mp4,
                     produce_gif=produce_gif,
+                    agent_prompt_mode=resolved_prompt_mode,
+                    media_redaction_mode=resolved_redact_mode,
                 )
             except DockerError as exc:
                 raise click.ClickException(str(exc)) from exc
@@ -247,6 +306,8 @@ def _execute_render(
                 produce_mp4=produce_mp4,
                 produce_gif=produce_gif,
                 resolved_mode=resolved_mode,
+                agent_prompt_mode=resolved_prompt_mode,
+                media_redact_mode=resolved_redact_mode,
             )
             return
 
@@ -266,6 +327,8 @@ def _execute_render(
                 run_mode="autonomous_video",
                 produce_mp4=produce_mp4,
                 produce_gif=produce_gif,
+                agent_prompt_mode=resolved_prompt_mode,
+                media_redaction_mode=resolved_redact_mode,
             )
         except DockerError as exc:
             message = format_local_video_dependency_help(missing_video_deps)
@@ -293,6 +356,8 @@ def _execute_render(
                 run_mode="scripted_vhs",
                 produce_mp4=produce_mp4,
                 produce_gif=produce_gif,
+                agent_prompt_mode=resolved_prompt_mode,
+                media_redaction_mode=resolved_redact_mode,
             )
         except DockerError as exc:
             if not auto_mode:
@@ -317,10 +382,17 @@ def _execute_render(
         produce_mp4=produce_mp4,
         produce_gif=produce_gif,
         resolved_mode=resolved_mode,
+        agent_prompt_mode=resolved_prompt_mode,
+        media_redact_mode=resolved_redact_mode,
     )
 
 
-@click.group(help="Terminal Demo Studio CLI (alpha): deterministic demo pipeline")
+@click.group(
+    help=(
+        "Terminal Demo Studio CLI (alpha): deterministic terminal demos in three lanes "
+        "(scripted, interactive, visual)."
+    )
+)
 def app() -> None:
     pass
 
@@ -330,7 +402,12 @@ def app() -> None:
 @click.option("template", "--template", type=str, default=None)
 @click.option("name", "--name", type=str, default=None)
 @click.option("destination", "--destination", type=click.Path(path_type=Path), default=None)
-@click.option("use_docker", "--docker/--local", default=None, help="Execution mode")
+@click.option(
+    "use_docker",
+    "--docker/--local",
+    default=None,
+    help="Runtime location (local machine or Docker container).",
+)
 @click.option("output_dir", "--output-dir", type=click.Path(path_type=Path), default=None)
 @click.option("keep_temp", "--keep-temp", is_flag=True, default=False)
 @click.option("rebuild", "--rebuild", is_flag=True, default=False)
@@ -352,10 +429,43 @@ def app() -> None:
     "run_mode",
     "--mode",
     type=click.Choice(
-        ["auto", "scripted_vhs", "autonomous_pty", "autonomous_video"], case_sensitive=False
+        [
+            "auto",
+            "scripted",
+            "interactive",
+            "visual",
+            "video",
+            "scripted_vhs",
+            "autonomous_pty",
+            "autonomous_video",
+        ],
+        case_sensitive=False,
     ),
     default="auto",
     show_default=True,
+    help=(
+        "Execution lane: scripted (tape replay), interactive (PTY command/assert), "
+        "visual (full-screen TUI capture)."
+    ),
+)
+@click.option(
+    "agent_prompt_mode",
+    "--agent-prompts",
+    type=click.Choice(["auto", "manual", "approve", "deny"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help=(
+        "How visual lane handles approval prompts: auto (use screenplay policy), "
+        "manual (no auto confirm), approve, or deny."
+    ),
+)
+@click.option(
+    "media_redact_mode",
+    "--redact",
+    type=click.Choice(["auto", "off", "input_line"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="Media redaction mode: auto, off, or input_line.",
 )
 def render(
     screenplay: Path | None,
@@ -369,6 +479,8 @@ def render(
     playback_mode: str,
     output_formats: tuple[str, ...],
     run_mode: str,
+    agent_prompt_mode: str,
+    media_redact_mode: str,
 ) -> None:
     if screenplay is not None and template is not None:
         raise click.ClickException("Use either a screenplay path or --template, not both")
@@ -404,6 +516,8 @@ def render(
             playback_mode=playback_mode,
             output_formats=output_formats,
             run_mode=run_mode,
+            agent_prompt_mode=agent_prompt_mode,
+            media_redact_mode=media_redact_mode,
         )
     finally:
         if temp_dir_ctx is not None:
@@ -412,7 +526,12 @@ def render(
 
 @app.command("run")
 @click.argument("screenplay", type=click.Path(exists=True, path_type=Path))
-@click.option("use_docker", "--docker/--local", default=None, help="Execution mode")
+@click.option(
+    "use_docker",
+    "--docker/--local",
+    default=None,
+    help="Runtime location (local machine or Docker container).",
+)
 @click.option("output_dir", "--output-dir", type=click.Path(path_type=Path), default=None)
 @click.option("keep_temp", "--keep-temp", is_flag=True, default=False)
 @click.option("rebuild", "--rebuild", is_flag=True, default=False)
@@ -434,10 +553,43 @@ def render(
     "run_mode",
     "--mode",
     type=click.Choice(
-        ["auto", "scripted_vhs", "autonomous_pty", "autonomous_video"], case_sensitive=False
+        [
+            "auto",
+            "scripted",
+            "interactive",
+            "visual",
+            "video",
+            "scripted_vhs",
+            "autonomous_pty",
+            "autonomous_video",
+        ],
+        case_sensitive=False,
     ),
     default="auto",
     show_default=True,
+    help=(
+        "Execution lane: scripted (tape replay), interactive (PTY command/assert), "
+        "visual (full-screen TUI capture)."
+    ),
+)
+@click.option(
+    "agent_prompt_mode",
+    "--agent-prompts",
+    type=click.Choice(["auto", "manual", "approve", "deny"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help=(
+        "How visual lane handles approval prompts: auto (use screenplay policy), "
+        "manual (no auto confirm), approve, or deny."
+    ),
+)
+@click.option(
+    "media_redact_mode",
+    "--redact",
+    type=click.Choice(["auto", "off", "input_line"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="Media redaction mode: auto, off, or input_line.",
 )
 def run(
     screenplay: Path,
@@ -448,6 +600,8 @@ def run(
     playback_mode: str,
     output_formats: tuple[str, ...],
     run_mode: str,
+    agent_prompt_mode: str,
+    media_redact_mode: str,
 ) -> None:
     _execute_render(
         screenplay=screenplay,
@@ -458,6 +612,8 @@ def run(
         playback_mode=playback_mode,
         output_formats=output_formats,
         run_mode=run_mode,
+        agent_prompt_mode=agent_prompt_mode,
+        media_redact_mode=media_redact_mode,
     )
 
 
@@ -536,6 +692,54 @@ def new(
     click.echo(f"Next: tds validate {output_path}")
 
 
+@app.command("lint")
+@click.argument("screenplay", type=click.Path(exists=True, path_type=Path))
+@click.option("as_json", "--json", is_flag=True, default=False)
+@click.option(
+    "strict",
+    "--strict",
+    is_flag=True,
+    default=False,
+    help="Treat warnings as failures.",
+)
+def lint(screenplay: Path, as_json: bool, strict: bool) -> None:
+    try:
+        loaded = load_screenplay(screenplay)
+    except ValidationError as exc:
+        raise click.ClickException(format_validation_error(exc)) from exc
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    result = lint_screenplay(loaded)
+    fail = bool(result.errors) or (strict and bool(result.warnings))
+    status = "fail" if fail else "pass"
+
+    if as_json:
+        payload = result.to_json()
+        payload["screenplay"] = str(screenplay.resolve())
+        payload["strict"] = strict
+        payload["status"] = status
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        if fail:
+            raise SystemExit(1)
+        return
+
+    for finding in result.findings:
+        location = ""
+        if finding.scenario is not None:
+            location = f" scenario={finding.scenario}"
+            if finding.step_index is not None:
+                location += f" step={finding.step_index}"
+        level = "ERROR" if finding.severity == "error" else "WARN"
+        click.echo(f"{level}{location} [{finding.code}] {finding.message}")
+
+    click.echo(f"STATUS={status}")
+    click.echo(f"ERRORS={len(result.errors)}")
+    click.echo(f"WARNINGS={len(result.warnings)}")
+    if fail:
+        raise SystemExit(1)
+
+
 @app.command("init")
 @click.option(
     "destination",
@@ -590,18 +794,30 @@ def init(destination: Path, template: str, name: str, force: bool) -> None:
     "mode",
     "--mode",
     type=click.Choice(
-        ["auto", "scripted_vhs", "autonomous_pty", "autonomous_video"], case_sensitive=False
+        [
+            "auto",
+            "scripted",
+            "interactive",
+            "visual",
+            "video",
+            "scripted_vhs",
+            "autonomous_pty",
+            "autonomous_video",
+        ],
+        case_sensitive=False,
     ),
     default="auto",
     show_default=True,
+    help="Lane health check. Friendly aliases: scripted, interactive, visual.",
 )
 def doctor(mode: str) -> None:
-    checks = run_doctor_checks(cast(RunMode, mode))
+    resolved_mode = _normalize_run_mode(mode)
+    checks = run_doctor_checks(resolved_mode)
     has_failures = False
     warning_checks = {"docker-daemon", "container-binaries", "local-ffmpeg-drawtext"}
-    if mode == "autonomous_pty":
+    if resolved_mode == "autonomous_pty":
         warning_checks.update({"local-vhs", "local-ffmpeg", "local-ffprobe"})
-    if mode == "autonomous_video":
+    if resolved_mode == "autonomous_video":
         warning_checks.update(
             {
                 "docker-daemon",

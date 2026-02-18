@@ -1,0 +1,31 @@
+title: "Autonomous Video Real Codex Multiturn"
+output: "autonomous_video_real_codex_multiturn"
+settings:
+  width: 1440
+  height: 900
+  theme: "GruvboxDark"
+  framerate: 30
+scenarios:
+  - label: "Real Codex Multiturn"
+    execution_mode: "autonomous_video"
+    setup:
+      - "if [ -n \"${OPENAI_API_KEY:-}\" ]; then printf \"%s\" \"$OPENAI_API_KEY\" | codex login --with-api-key >/dev/null 2>&1 || true; fi"
+    actions:
+      - command: "codex -a never -s workspace-write"
+      - sleep: "2s"
+      - input: "Reply with exactly this token and nothing else: TDS_PHASE_ONE"
+      - key: "enter"
+      - wait_for: "TDS_PHASE_ONE"
+        wait_mode: "screen"
+        wait_timeout: "120s"
+      - input: "Now provide a 3-step rollout plan for an API migration and end your answer with token TDS_PLAN_READY."
+      - key: "enter"
+      - wait_for: "TDS_PLAN_READY"
+        wait_mode: "screen"
+        wait_timeout: "180s"
+      - input: "Give a one-line summary and include token TDS_DONE."
+      - key: "enter"
+      - wait_for: "TDS_DONE"
+        wait_mode: "screen"
+        wait_timeout: "120s"
+      - sleep: "1s"

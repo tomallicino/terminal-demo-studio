@@ -15,6 +15,7 @@ from terminal_demo_studio.artifacts import (
 )
 from terminal_demo_studio.editor import compose_split_screen
 from terminal_demo_studio.models import Scenario, Screenplay, Settings, load_screenplay
+from terminal_demo_studio.redaction import MediaRedactionMode, resolve_media_redaction_mode
 from terminal_demo_studio.runtime.shells import build_shell_command
 from terminal_demo_studio.tape import compile_tape
 
@@ -71,8 +72,13 @@ def run_director(
     produce_mp4: bool = True,
     produce_gif: bool = True,
     playback_mode: PlaybackMode = "sequential",
+    media_redaction_mode: MediaRedactionMode = "auto",
 ) -> ScriptedRunResult:
     screenplay = load_screenplay(screenplay_path)
+    resolved_redaction_mode = resolve_media_redaction_mode(
+        screenplay=screenplay,
+        override_mode=media_redaction_mode,
+    )
     run_layout = create_run_layout(
         screenplay_path=screenplay_path,
         output_dir=output_dir,
@@ -128,7 +134,7 @@ def run_director(
             final_gif = run_layout.media_dir / f"{output_stem}.gif"
 
             target_mp4 = final_mp4 if produce_mp4 else temp_dir / f"{output_stem}.discard.mp4"
-            target_gif = final_gif if produce_gif else temp_dir / f"{output_stem}.discard.gif"
+            target_gif = final_gif if produce_gif else None
 
             compose_split_screen(
                 inputs=scene_videos,
@@ -136,6 +142,7 @@ def run_director(
                 output_mp4=target_mp4,
                 output_gif=target_gif,
                 playback_mode=playback_mode,
+                redaction_mode=resolved_redaction_mode,
             )
 
             summary_payload: dict[str, object] = {
@@ -144,6 +151,7 @@ def run_director(
                 "status": "success",
                 "screenplay": str(screenplay_path.resolve()),
                 "playback_mode": playback_mode,
+                "media_redaction": resolved_redaction_mode,
                 "media": {
                     "gif": str(final_gif) if produce_gif else None,
                     "mp4": str(final_mp4) if produce_mp4 else None,

@@ -1,0 +1,21 @@
+title: "Autonomous Video Real Codex CLI"
+output: "autonomous_video_real_codex_cli"
+settings:
+  width: 1440
+  height: 900
+  theme: "GruvboxDark"
+  framerate: 30
+scenarios:
+  - label: "Real Codex CLI"
+    execution_mode: "autonomous_video"
+    setup:
+      - "if [ -n \"${OPENAI_API_KEY:-}\" ]; then printf \"%s\" \"$OPENAI_API_KEY\" | codex login --with-api-key >/dev/null 2>&1 || true; fi"
+    actions:
+      - command: "codex -a never -s workspace-write"
+      - sleep: "2s"
+      - input: "What is the reverse of the word stressed? Reply with only lowercase letters."
+      - key: "enter"
+      - wait_for: "desserts"
+        wait_mode: "screen"
+        wait_timeout: "180s"
+      - sleep: "2s"

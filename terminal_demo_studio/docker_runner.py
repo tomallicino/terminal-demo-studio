@@ -7,9 +7,155 @@ import subprocess
 from pathlib import Path
 from typing import Literal
 
+IMAGE_REPOSITORY = "terminal-demo-studio"
+IMAGE_TAG_PREFIX = f"{IMAGE_REPOSITORY}:v1-"
+
 
 class DockerError(RuntimeError):
     """Raised when docker operations fail."""
+
+
+def _env_enabled(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _docker_hardening_flags() -> list[str]:
+    if not _env_enabled("TDS_DOCKER_HARDENING", True):
+        return []
+    flags = [
+        "--security-opt",
+        "no-new-privileges=true",
+        "--cap-drop",
+        "ALL",
+    ]
+    pids_limit = os.environ.get("TDS_DOCKER_PIDS_LIMIT", "512").strip()
+    if pids_limit:
+        flags.extend(["--pids-limit", pids_limit])
+    return flags
+
+
+def _docker_network_flags() -> list[str]:
+    network_mode = os.environ.get("TDS_DOCKER_NETWORK", "").strip()
+    if not network_mode:
+        return []
+    return ["--network", network_mode]
+
+
+def _docker_read_only_flags() -> list[str]:
+    if not _env_enabled("TDS_DOCKER_READ_ONLY", False):
+        return []
+    return [
+        "--read-only",
+        "--tmpfs",
+        "/tmp:rw,nosuid,nodev,size=256m",
+        "-e",
+        "HOME=/tmp",
+    ]
+
+
+def _docker_image_retention_count() -> int:
+    raw = os.environ.get("TDS_DOCKER_IMAGE_RETENTION", "3").strip()
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return 3
+    return max(parsed, 0)
+
+
+def _select_prunable_image_tags(
+    *,
+    ordered_tags: list[str],
+    keep_tags: set[str],
+    retention_count: int,
+) -> list[str]:
+    if retention_count <= 0:
+        protected = set(keep_tags)
+    else:
+        protected = set(ordered_tags[:retention_count]) | keep_tags
+    return [tag for tag in ordered_tags if tag not in protected]
+
+
+def _list_hashed_image_tags() -> list[str]:
+    try:
+        result = subprocess.run(
+            [
+                "docker",
+                "image",
+                "ls",
+                "--format",
+                "{{.Repository}}:{{.Tag}}",
+                "--filter",
+                f"reference={IMAGE_TAG_PREFIX}*",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:  # noqa: BLE001
+        return []
+    if result.returncode != 0:
+        return []
+    return [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip() and "<none>" not in line
+    ]
+
+
+def _created_timestamps_by_tag(tags: list[str]) -> dict[str, str]:
+    if not tags:
+        return {}
+    try:
+        result = subprocess.run(
+            ["docker", "image", "inspect", *tags],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:  # noqa: BLE001
+        return {}
+    if result.returncode != 0:
+        return {}
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return {}
+    created_by_tag: dict[str, str] = {}
+    tag_set = set(tags)
+    for image in payload:
+        created = str(image.get("Created", ""))
+        for repo_tag in image.get("RepoTags") or []:
+            if repo_tag in tag_set:
+                created_by_tag[repo_tag] = created
+    return created_by_tag
+
+
+def _prune_stale_hashed_images(*, keep_tags: set[str]) -> None:
+    retention_count = _docker_image_retention_count()
+    tags = _list_hashed_image_tags()
+    if not tags:
+        return
+    created_by_tag = _created_timestamps_by_tag(tags)
+    ordered_tags = sorted(tags, key=lambda tag: created_by_tag.get(tag, ""), reverse=True)
+    prunable = _select_prunable_image_tags(
+        ordered_tags=ordered_tags,
+        keep_tags=keep_tags,
+        retention_count=retention_count,
+    )
+    for tag in prunable:
+        try:
+            subprocess.run(
+                ["docker", "image", "rm", tag],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except Exception:  # noqa: BLE001
+            # Pruning is best-effort and must never block demo generation.
+            continue
 
 
 def _container_path_to_host(path_value: str, project_root: Path) -> Path:
@@ -48,6 +194,41 @@ def _rewrite_summary_paths(summary_path: Path, project_root: Path) -> None:
         summary_path.write_text(json.dumps(mapped, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def _parse_result_output(stdout: str, project_root: Path) -> dict[str, Path | str | None]:
+    parsed: dict[str, Path | str | None] = {
+        "status": None,
+        "run_dir": None,
+        "events": None,
+        "summary": None,
+        "media_mp4": None,
+        "media_gif": None,
+    }
+    for line in stdout.splitlines():
+        if line.startswith("RUN_DIR="):
+            parsed["run_dir"] = _container_path_to_host(
+                line.removeprefix("RUN_DIR="), project_root
+            )
+        elif line.startswith("EVENTS="):
+            parsed["events"] = _container_path_to_host(
+                line.removeprefix("EVENTS="), project_root
+            )
+        elif line.startswith("SUMMARY="):
+            parsed["summary"] = _container_path_to_host(
+                line.removeprefix("SUMMARY="), project_root
+            )
+        elif line.startswith("MEDIA_MP4="):
+            parsed["media_mp4"] = _container_path_to_host(
+                line.removeprefix("MEDIA_MP4="), project_root
+            )
+        elif line.startswith("MEDIA_GIF="):
+            parsed["media_gif"] = _container_path_to_host(
+                line.removeprefix("MEDIA_GIF="), project_root
+            )
+        elif line.startswith("STATUS="):
+            parsed["status"] = line.removeprefix("STATUS=")
+    return parsed
+
+
 def _hash_files(base: Path, paths: list[Path]) -> str:
     digest = hashlib.sha256()
     for path in sorted(paths):
@@ -81,7 +262,7 @@ def compute_image_tag(project_root: Path) -> str:
         raise DockerError(f"No Docker inputs found under {studio_root}")
 
     short_hash = _hash_files(studio_root, files_to_hash)[:12]
-    return f"terminal-demo-studio:v1-{short_hash}"
+    return f"{IMAGE_REPOSITORY}:v1-{short_hash}"
 
 
 def ensure_docker_reachable() -> None:
@@ -111,6 +292,7 @@ def ensure_image(project_root: Path, rebuild: bool = False) -> str:
 
     image_tag = compute_image_tag(project_root)
     if not rebuild and _image_exists(image_tag):
+        _prune_stale_hashed_images(keep_tags={image_tag})
         return image_tag
 
     try:
@@ -131,8 +313,10 @@ def ensure_image(project_root: Path, rebuild: bool = False) -> str:
     except subprocess.CalledProcessError as exc:
         message = (exc.stderr or exc.stdout or str(exc)).strip()
         if not rebuild and "already exists" in message.lower() and _image_exists(image_tag):
+            _prune_stale_hashed_images(keep_tags={image_tag})
             return image_tag
         raise DockerError(message) from exc
+    _prune_stale_hashed_images(keep_tags={image_tag})
     return image_tag
 
 
@@ -143,6 +327,8 @@ def run_in_docker(
     rebuild: bool = False,
     playback_mode: Literal["sequential", "simultaneous"] = "sequential",
     run_mode: Literal["scripted_vhs", "autonomous_video"] = "scripted_vhs",
+    agent_prompt_mode: Literal["auto", "manual", "approve", "deny"] = "auto",
+    media_redaction_mode: Literal["auto", "off", "input_line"] = "auto",
     produce_mp4: bool = True,
     produce_gif: bool = True,
 ) -> dict[str, Path | str | None]:
@@ -168,6 +354,9 @@ def run_in_docker(
         f"{project_root}:/workspace",
         "-w",
         "/workspace",
+        *_docker_hardening_flags(),
+        *_docker_network_flags(),
+        *_docker_read_only_flags(),
         "-e",
         "TERMINAL_DEMO_STUDIO_IN_CONTAINER=1",
     ]
@@ -187,6 +376,10 @@ def run_in_docker(
             "--local",
             "--mode",
             run_mode,
+            "--agent-prompts",
+            agent_prompt_mode,
+            "--redact",
+            media_redaction_mode,
             "--playback",
             playback_mode,
         ]
@@ -209,47 +402,34 @@ def run_in_docker(
         cmd.extend(["--output", "gif"])
 
     result = subprocess.run(cmd, check=False, capture_output=True, text=True)
-    if result.stdout:
-        print(result.stdout, end="")
-    if result.stderr:
-        print(result.stderr, end="")
+    if _env_enabled("TDS_DOCKER_VERBOSE", False):
+        if result.stdout:
+            print(result.stdout, end="")
+        if result.stderr:
+            print(result.stderr, end="")
+    parsed_output = _parse_result_output(result.stdout, project_root)
+    summary_path = parsed_output.get("summary")
+    if isinstance(summary_path, Path):
+        _rewrite_summary_paths(summary_path, project_root)
+
     if result.returncode != 0:
         message = result.stderr.strip() or result.stdout.strip() or "docker run failed"
+        if isinstance(parsed_output.get("run_dir"), Path):
+            message = f"{message}\nRUN_DIR={parsed_output['run_dir']}"
+        if isinstance(parsed_output.get("summary"), Path):
+            message = f"{message}\nSUMMARY={parsed_output['summary']}"
+        if isinstance(parsed_output.get("events"), Path):
+            message = f"{message}\nEVENTS={parsed_output['events']}"
         raise DockerError(message)
 
     parsed: dict[str, Path | str | None] = {
         "status": "success",
-        "run_dir": None,
-        "events": None,
-        "summary": None,
-        "media_mp4": None,
-        "media_gif": None,
+        "run_dir": parsed_output.get("run_dir"),
+        "events": parsed_output.get("events"),
+        "summary": parsed_output.get("summary"),
+        "media_mp4": parsed_output.get("media_mp4"),
+        "media_gif": parsed_output.get("media_gif"),
     }
-    for line in result.stdout.splitlines():
-        if line.startswith("RUN_DIR="):
-            parsed["run_dir"] = _container_path_to_host(
-                line.removeprefix("RUN_DIR="), project_root
-            )
-        elif line.startswith("EVENTS="):
-            parsed["events"] = _container_path_to_host(
-                line.removeprefix("EVENTS="), project_root
-            )
-        elif line.startswith("SUMMARY="):
-            parsed["summary"] = _container_path_to_host(
-                line.removeprefix("SUMMARY="), project_root
-            )
-        elif line.startswith("MEDIA_MP4="):
-            parsed["media_mp4"] = _container_path_to_host(
-                line.removeprefix("MEDIA_MP4="), project_root
-            )
-        elif line.startswith("MEDIA_GIF="):
-            parsed["media_gif"] = _container_path_to_host(
-                line.removeprefix("MEDIA_GIF="), project_root
-            )
-        elif line.startswith("STATUS="):
-            parsed["status"] = line.removeprefix("STATUS=")
-
-    summary_path = parsed.get("summary")
-    if isinstance(summary_path, Path):
-        _rewrite_summary_paths(summary_path, project_root)
+    if isinstance(parsed_output.get("status"), str):
+        parsed["status"] = parsed_output["status"]
     return parsed

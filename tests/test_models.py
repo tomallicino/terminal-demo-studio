@@ -162,6 +162,103 @@ def test_accepts_autonomous_video_execution_mode() -> None:
     assert parsed.scenarios[0].execution_mode == "autonomous_video"
 
 
+def test_accepts_agent_prompt_policy_in_screenplay_and_scenario() -> None:
+    data = {
+        "title": "VideoPrompts",
+        "output": "demo",
+        "settings": {},
+        "agent_prompts": {
+            "mode": "approve",
+            "allow_regex": "mkdir|cat",
+            "max_rounds": 8,
+        },
+        "scenarios": [
+            {
+                "label": "Only",
+                "execution_mode": "autonomous_video",
+                "agent_prompts": {
+                    "mode": "deny",
+                    "prompt_regex": "Press enter to confirm or esc to cancel",
+                },
+                "actions": [{"command": "codex -a on-request -s workspace-write"}],
+            }
+        ],
+    }
+
+    parsed = parse_screenplay_data(data)
+    assert parsed.agent_prompts is not None
+    assert parsed.agent_prompts.mode == "approve"
+    assert parsed.scenarios[0].agent_prompts is not None
+    assert parsed.scenarios[0].agent_prompts.mode == "deny"
+
+
+def test_rejects_approve_policy_without_allow_regex() -> None:
+    data = {
+        "title": "UnsafePrompts",
+        "output": "demo",
+        "settings": {},
+        "agent_prompts": {"mode": "approve"},
+        "scenarios": [
+            {
+                "label": "Only",
+                "execution_mode": "autonomous_video",
+                "actions": [{"command": "codex -a on-request -s workspace-write"}],
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError, match="approve mode requires a non-empty allow_regex"):
+        parse_screenplay_data(data)
+
+
+def test_rejects_agent_prompt_policy_with_invalid_regex() -> None:
+    data = {
+        "title": "InvalidRegex",
+        "output": "demo",
+        "settings": {},
+        "agent_prompts": {
+            "mode": "deny",
+            "prompt_regex": "[unterminated",
+        },
+        "scenarios": [
+            {
+                "label": "Only",
+                "execution_mode": "autonomous_video",
+                "actions": [{"command": "codex -a on-request -s workspace-write"}],
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError, match="prompt_regex is not a valid regex"):
+        parse_screenplay_data(data)
+
+
+def test_rejects_agent_prompt_policy_with_empty_allowed_prefix() -> None:
+    data = {
+        "title": "InvalidPrefixes",
+        "output": "demo",
+        "settings": {},
+        "agent_prompts": {
+            "mode": "approve",
+            "allow_regex": "mkdir",
+            "allowed_command_prefixes": ["mkdir ", "   "],
+        },
+        "scenarios": [
+            {
+                "label": "Only",
+                "execution_mode": "autonomous_video",
+                "actions": [{"command": "codex -a on-request -s workspace-write"}],
+            }
+        ],
+    }
+
+    with pytest.raises(
+        ValidationError,
+        match="allowed_command_prefixes must not contain empty values",
+    ):
+        parse_screenplay_data(data)
+
+
 def test_rejects_multiple_action_primitives() -> None:
     data = {
         "title": "Invalid",

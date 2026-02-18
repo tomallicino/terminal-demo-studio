@@ -1,0 +1,31 @@
+title: "Autonomous Video Real Codex Hello Project Deny"
+output: "autonomous_video_real_codex_hello_project_deny"
+settings:
+  width: 1440
+  height: 900
+  theme: "GruvboxDark"
+  framerate: 30
+scenarios:
+  - label: "Codex Project Build (Deny)"
+    execution_mode: "autonomous_video"
+    agent_prompts:
+      mode: "deny"
+      prompt_regex: "Press enter to confirm or esc to cancel"
+      max_rounds: 8
+    setup:
+      - "if [ -n \"${OPENAI_API_KEY:-}\" ]; then printf \"%s\" \"$OPENAI_API_KEY\" | codex login --with-api-key >/dev/null 2>&1 || true; fi"
+      - "rm -rf /workspace/examples/real/codex_demo_workspace/hello_real_project_deny"
+    actions:
+      - command: "codex -a on-request -s workspace-write"
+      - sleep: "2s"
+      - input: "Create /workspace/examples/real/codex_demo_workspace/hello_real_project_deny with README.md and main.py."
+      - key: "enter"
+      - sleep: "6s"
+  - label: "Independent Deny Verification"
+    execution_mode: "autonomous_video"
+    actions:
+      - command: "test ! -e /workspace/examples/real/codex_demo_workspace/hello_real_project_deny && printf '%s\\n' 'TDS_DENY_OK'"
+      - wait_for: "^TDS_DENY_OK$"
+        wait_mode: "line"
+        wait_timeout: "30s"
+      - sleep: "1s"

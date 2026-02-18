@@ -30,6 +30,7 @@ class Settings(BaseModel):
     line_height: float = 1.15
     letter_spacing: int = 0
     cursor_blink: bool = False
+    media_redaction: Literal["auto", "off", "input_line"] = "auto"
 
 
 class Action(BaseModel):
@@ -99,6 +100,42 @@ class PromptSettings(BaseModel):
     symbol: str = "%"
 
 
+class AgentPromptPolicy(BaseModel):
+    mode: Literal["manual", "approve", "deny"] = "manual"
+    prompt_regex: str = "Press enter to confirm or esc to cancel"
+    allow_regex: str | None = None
+    allowed_command_prefixes: list[str] = Field(default_factory=list)
+    max_rounds: int = Field(default=6, ge=1, le=50)
+    approve_key: str = "enter"
+    deny_key: str = "esc"
+
+    @model_validator(mode="after")
+    def validate_policy(self) -> AgentPromptPolicy:
+        try:
+            re.compile(self.prompt_regex, re.MULTILINE)
+        except re.error as exc:
+            raise ValueError(f"prompt_regex is not a valid regex: {exc}") from exc
+
+        if self.allow_regex is not None:
+            try:
+                re.compile(self.allow_regex, re.MULTILINE)
+            except re.error as exc:
+                raise ValueError(f"allow_regex is not a valid regex: {exc}") from exc
+
+        if self.mode == "approve" and not (self.allow_regex and self.allow_regex.strip()):
+            raise ValueError("approve mode requires a non-empty allow_regex")
+
+        normalized_prefixes = [prefix.strip() for prefix in self.allowed_command_prefixes]
+        if any(not prefix for prefix in normalized_prefixes):
+            raise ValueError("allowed_command_prefixes must not contain empty values")
+        self.allowed_command_prefixes = normalized_prefixes
+
+        if self.approve_key.strip().lower() == self.deny_key.strip().lower():
+            raise ValueError("approve_key and deny_key must be different")
+
+        return self
+
+
 class Scenario(BaseModel):
     label: str
     surface: Literal["terminal"] = "terminal"
@@ -108,6 +145,7 @@ class Scenario(BaseModel):
     shell: Literal["auto", "bash", "zsh", "fish", "pwsh", "cmd"] = "auto"
     adapter: str = "generic"
     prompt: PromptSettings | None = None
+    agent_prompts: AgentPromptPolicy | None = None
     setup: list[str] = Field(default_factory=list)
     actions: list[Action | str] = Field(min_length=1)
 
@@ -117,6 +155,7 @@ class Screenplay(BaseModel):
     output: str
     settings: Settings = Field(default_factory=Settings)
     scenarios: list[Scenario] = Field(min_length=1)
+    agent_prompts: AgentPromptPolicy | None = None
     variables: dict[str, Any] = Field(default_factory=dict)
     preinstall: list[str] = Field(default_factory=list)
 
