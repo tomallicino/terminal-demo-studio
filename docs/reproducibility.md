@@ -8,7 +8,7 @@
 - Terminal geometry (`settings.width`, `settings.height`, `padding`, `margin`)
 - Playback settings (`playback`, framerate, waits/sleeps)
 - Theme and prompt settings
-- Execution lane (`scripted_vhs` vs `autonomous_pty`)
+- Execution lane (`scripted_vhs` vs `autonomous_pty` vs `autonomous_video`)
 
 ## Toolchain Knobs
 
@@ -23,6 +23,7 @@
 - Keep shell behavior stable (`bash`/`zsh`/`pwsh` choice).
 - Use fixed dependencies in CI and local environments.
 - For team-wide parity, prefer containerized rendering with pinned image tags.
+- Default Docker image retention keeps recent hashed tags and prunes stale ones to reduce local disk drift (`TDS_DOCKER_IMAGE_RETENTION`).
 
 ## What Is Stable
 

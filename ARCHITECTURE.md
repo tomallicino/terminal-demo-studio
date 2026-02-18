@@ -42,7 +42,7 @@
 - `terminal_demo_studio/doctor.py`
   - mode-aware diagnostics with actionable `NEXT:` guidance.
 - `terminal_demo_studio/docker_runner.py`
-  - optional dockerized execution.
+  - optional dockerized execution with hashed image reuse + stale-tag retention pruning.
 
 ## Execution Lanes
 

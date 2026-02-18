@@ -7,6 +7,9 @@ import subprocess
 from pathlib import Path
 from typing import Literal
 
+IMAGE_REPOSITORY = "terminal-demo-studio"
+IMAGE_TAG_PREFIX = f"{IMAGE_REPOSITORY}:v1-"
+
 
 class DockerError(RuntimeError):
     """Raised when docker operations fail."""
@@ -51,6 +54,108 @@ def _docker_read_only_flags() -> list[str]:
         "-e",
         "HOME=/tmp",
     ]
+
+
+def _docker_image_retention_count() -> int:
+    raw = os.environ.get("TDS_DOCKER_IMAGE_RETENTION", "3").strip()
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return 3
+    return max(parsed, 0)
+
+
+def _select_prunable_image_tags(
+    *,
+    ordered_tags: list[str],
+    keep_tags: set[str],
+    retention_count: int,
+) -> list[str]:
+    if retention_count <= 0:
+        protected = set(keep_tags)
+    else:
+        protected = set(ordered_tags[:retention_count]) | keep_tags
+    return [tag for tag in ordered_tags if tag not in protected]
+
+
+def _list_hashed_image_tags() -> list[str]:
+    try:
+        result = subprocess.run(
+            [
+                "docker",
+                "image",
+                "ls",
+                "--format",
+                "{{.Repository}}:{{.Tag}}",
+                "--filter",
+                f"reference={IMAGE_TAG_PREFIX}*",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:  # noqa: BLE001
+        return []
+    if result.returncode != 0:
+        return []
+    return [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip() and "<none>" not in line
+    ]
+
+
+def _created_timestamps_by_tag(tags: list[str]) -> dict[str, str]:
+    if not tags:
+        return {}
+    try:
+        result = subprocess.run(
+            ["docker", "image", "inspect", *tags],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:  # noqa: BLE001
+        return {}
+    if result.returncode != 0:
+        return {}
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return {}
+    created_by_tag: dict[str, str] = {}
+    tag_set = set(tags)
+    for image in payload:
+        created = str(image.get("Created", ""))
+        for repo_tag in image.get("RepoTags") or []:
+            if repo_tag in tag_set:
+                created_by_tag[repo_tag] = created
+    return created_by_tag
+
+
+def _prune_stale_hashed_images(*, keep_tags: set[str]) -> None:
+    retention_count = _docker_image_retention_count()
+    tags = _list_hashed_image_tags()
+    if not tags:
+        return
+    created_by_tag = _created_timestamps_by_tag(tags)
+    ordered_tags = sorted(tags, key=lambda tag: created_by_tag.get(tag, ""), reverse=True)
+    prunable = _select_prunable_image_tags(
+        ordered_tags=ordered_tags,
+        keep_tags=keep_tags,
+        retention_count=retention_count,
+    )
+    for tag in prunable:
+        try:
+            subprocess.run(
+                ["docker", "image", "rm", tag],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except Exception:  # noqa: BLE001
+            # Pruning is best-effort and must never block demo generation.
+            continue
 
 
 def _container_path_to_host(path_value: str, project_root: Path) -> Path:
@@ -157,7 +262,7 @@ def compute_image_tag(project_root: Path) -> str:
         raise DockerError(f"No Docker inputs found under {studio_root}")
 
     short_hash = _hash_files(studio_root, files_to_hash)[:12]
-    return f"terminal-demo-studio:v1-{short_hash}"
+    return f"{IMAGE_REPOSITORY}:v1-{short_hash}"
 
 
 def ensure_docker_reachable() -> None:
@@ -187,6 +292,7 @@ def ensure_image(project_root: Path, rebuild: bool = False) -> str:
 
     image_tag = compute_image_tag(project_root)
     if not rebuild and _image_exists(image_tag):
+        _prune_stale_hashed_images(keep_tags={image_tag})
         return image_tag
 
     try:
@@ -207,8 +313,10 @@ def ensure_image(project_root: Path, rebuild: bool = False) -> str:
     except subprocess.CalledProcessError as exc:
         message = (exc.stderr or exc.stdout or str(exc)).strip()
         if not rebuild and "already exists" in message.lower() and _image_exists(image_tag):
+            _prune_stale_hashed_images(keep_tags={image_tag})
             return image_tag
         raise DockerError(message) from exc
+    _prune_stale_hashed_images(keep_tags={image_tag})
     return image_tag
 
 

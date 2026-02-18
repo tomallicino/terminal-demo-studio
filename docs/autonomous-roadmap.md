@@ -27,6 +27,7 @@ This document tracks autonomous complex-TUI support across both runtime lanes.
   - media redaction pipeline (`auto|off|input_line`) with safe defaults
   - failure bundle redaction for sensitive values (API keys/token-like values)
   - hardened Docker defaults (`cap-drop`, `no-new-privileges`, PID limit)
+  - docker image retention pruning (`TDS_DOCKER_IMAGE_RETENTION`, default keep latest 3 tags)
   - Kitty remote control constrained to `socket-only` with a private per-scenario socket directory
   - prompt-loop policies (`manual`, `approve`, `deny`) with bounded rounds and optional `allow_regex`
   - optional `allowed_command_prefixes` allowlist to scope what approve mode can confirm

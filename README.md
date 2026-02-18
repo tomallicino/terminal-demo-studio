@@ -116,6 +116,9 @@ Failure bundle text is value-redacted by default for token/API-key-like patterns
 - `TDS_DOCKER_NETWORK` (optional, e.g. `none`).
 - `TDS_DOCKER_READ_ONLY=1` (optional).
 - `TDS_DOCKER_VERBOSE=1` (optional log streaming).
+- `TDS_DOCKER_IMAGE_RETENTION=3` (default): keep latest hashed `terminal-demo-studio:v1-*` images and prune older tags automatically after image resolution.
+
+If you iterate rapidly in development, image retention prevents local Docker storage growth from many historical build tags.
 
 ## Real Codex Workflows
 

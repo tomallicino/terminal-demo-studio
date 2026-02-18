@@ -181,6 +181,7 @@ Canonical map of shipped behavior in this repository.
   - Redacts sensitive values in failure bundles (`reason.txt`, `screen.txt`, `video_runner.log`, and step metadata).
   - Bounds `preinstall` and `scenario.setup` shell commands with configurable timeout.
   - Applies hardened Docker defaults for container runs (`no-new-privileges`, dropped capabilities, PID limits).
+  - Prunes stale hashed Docker image tags after image resolution (default retention: latest 3).
   - Restricts Kitty remote control to `socket-only` and uses private per-scenario socket directories.
 - Entry points:
   - `terminal_demo_studio/runtime/video_runner.py`

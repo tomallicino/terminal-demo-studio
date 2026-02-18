@@ -40,6 +40,101 @@ def test_compute_image_tag_changes_when_package_code_changes(tmp_path: Path) -> 
     assert before != after
 
 
+def test_select_prunable_image_tags_keeps_latest_and_protected() -> None:
+    ordered = [
+        "terminal-demo-studio:v1-new",
+        "terminal-demo-studio:v1-mid",
+        "terminal-demo-studio:v1-old",
+        "terminal-demo-studio:v1-ancient",
+    ]
+    prunable = docker_runner._select_prunable_image_tags(
+        ordered_tags=ordered,
+        keep_tags={"terminal-demo-studio:v1-old"},
+        retention_count=2,
+    )
+
+    assert prunable == ["terminal-demo-studio:v1-ancient"]
+
+
+def test_select_prunable_image_tags_allows_disable_retention() -> None:
+    ordered = [
+        "terminal-demo-studio:v1-new",
+        "terminal-demo-studio:v1-old",
+    ]
+    prunable = docker_runner._select_prunable_image_tags(
+        ordered_tags=ordered,
+        keep_tags={"terminal-demo-studio:v1-new"},
+        retention_count=0,
+    )
+
+    assert prunable == ["terminal-demo-studio:v1-old"]
+
+
+def test_docker_image_retention_count_parses_env(monkeypatch: object) -> None:
+    monkeypatch.setenv("TDS_DOCKER_IMAGE_RETENTION", "7")
+    assert docker_runner._docker_image_retention_count() == 7
+
+    monkeypatch.setenv("TDS_DOCKER_IMAGE_RETENTION", "invalid")
+    assert docker_runner._docker_image_retention_count() == 3
+
+    monkeypatch.setenv("TDS_DOCKER_IMAGE_RETENTION", "-5")
+    assert docker_runner._docker_image_retention_count() == 0
+
+
+def test_ensure_image_prunes_stale_tags_when_image_exists(
+    monkeypatch: object, tmp_path: Path
+) -> None:
+    image_tag = "terminal-demo-studio:v1-hash123"
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(docker_runner, "ensure_docker_reachable", lambda: None)
+    monkeypatch.setattr(docker_runner, "compute_image_tag", lambda project_root: image_tag)
+    monkeypatch.setattr(docker_runner, "_image_exists", lambda tag: True)
+
+    def fake_prune(*, keep_tags: set[str]) -> None:
+        captured["keep_tags"] = keep_tags
+
+    monkeypatch.setattr(docker_runner, "_prune_stale_hashed_images", fake_prune)
+
+    (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    result = docker_runner.ensure_image(tmp_path, rebuild=False)
+
+    assert result == image_tag
+    assert captured["keep_tags"] == {image_tag}
+
+
+def test_ensure_image_prunes_stale_tags_after_build(monkeypatch: object, tmp_path: Path) -> None:
+    image_tag = "terminal-demo-studio:v1-hash123"
+    captured: dict[str, object] = {"build_called": False}
+
+    monkeypatch.setattr(docker_runner, "ensure_docker_reachable", lambda: None)
+    monkeypatch.setattr(docker_runner, "compute_image_tag", lambda project_root: image_tag)
+    monkeypatch.setattr(docker_runner, "_image_exists", lambda tag: False)
+
+    def fake_run(
+        cmd: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        _ = capture_output
+        _ = text
+        assert check is True
+        assert cmd[:2] == ["docker", "build"]
+        captured["build_called"] = True
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+
+    def fake_prune(*, keep_tags: set[str]) -> None:
+        captured["keep_tags"] = keep_tags
+
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+    monkeypatch.setattr(docker_runner, "_prune_stale_hashed_images", fake_prune)
+
+    (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    result = docker_runner.ensure_image(tmp_path, rebuild=False)
+
+    assert result == image_tag
+    assert captured["build_called"] is True
+    assert captured["keep_tags"] == {image_tag}
+
+
 def test_run_in_docker_forwards_playback_mode(monkeypatch: object) -> None:
     captured: dict[str, object] = {}
 

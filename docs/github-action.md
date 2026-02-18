@@ -38,7 +38,7 @@ jobs:
 ## Inputs
 
 - `screenplay` (required): path to screenplay YAML.
-- `mode`: `scripted_vhs` or `autonomous_pty` (default `scripted_vhs`).
+- `mode`: lane to execute (`scripted_vhs`, `autonomous_pty`, or `autonomous_video`) (default `scripted_vhs`).
 - `outputs`: comma-separated formats (`gif`, `mp4`) (default `gif`).
 - `output_dir`: output directory (default `outputs`).
 - `upload_artifact`: upload the run directory artifact (default `true`).
@@ -55,5 +55,6 @@ jobs:
 ## Notes
 
 - The action is portable for `autonomous_pty` mode.
-- In this release, scripted rendering inside this action is installed for Linux/macOS.
+- Scripted rendering dependencies are provisioned automatically on Linux/macOS.
+- `autonomous_video` requires visual runtime dependencies (`kitty`, `Xvfb`, `ffmpeg`) on the runner or a Docker-capable flow.
 - For scripted mode on Windows, use a local runner setup or defer to Linux/macOS workflows.

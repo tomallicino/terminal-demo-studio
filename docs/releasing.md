@@ -27,6 +27,7 @@ The publish workflow builds and uploads distributions via OIDC.
 - [ ] `ruff check .`
 - [ ] `mypy terminal_demo_studio`
 - [ ] `pytest tests -v`
+- [ ] `tds lint examples/real/autonomous_video_codex_hello_project_approval.yaml --strict`
 - [ ] `./scripts/install_context_smoke.sh` (non-Windows)
 - [ ] `./scripts/readme_smoke.sh` (Linux/macOS)
 - [ ] `./scripts/release_preflight.sh` (non-Windows)
