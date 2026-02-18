@@ -121,7 +121,7 @@ jobs:
 
       - name: Portable mock render smoke
         run: |
-          python -m terminal_demo_studio.cli run examples/mock/safety_wizard.yaml --mode scripted_vhs --local --output-dir outputs --output gif
+          python -m terminal_demo_studio.cli run examples/mock/render_smoke.yaml --mode scripted_vhs --local --output-dir outputs --output gif
 
       - name: Setup Node
         if: runner.os == 'Linux'
