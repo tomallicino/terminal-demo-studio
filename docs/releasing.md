@@ -1,60 +1,61 @@
 # Releasing
 
-## PyPI Trusted Publisher Setup
+Release flow for `terminal-demo-studio` on PyPI + GitHub.
 
-1. Create PyPI project: `terminal-demo-studio`.
+## PyPI trusted publisher setup
+
+1. Create PyPI project `terminal-demo-studio`.
 2. Add trusted publisher:
-   - Owner: `tomallicino`
-   - Repo: `terminal-demo-studio`
-   - Workflow: `publish.yml`
-   - Environment: `pypi`
+- Owner: `tomallicino`
+- Repository: `terminal-demo-studio`
+- Workflow: `publish.yml`
+- Environment: `pypi`
 
-## GitHub Setup
+## GitHub setup
 
-1. Create repository environment `pypi`.
-2. Merge to default branch.
-3. Tag release:
+1. Create a `pypi` environment in repository settings.
+2. Ensure `.github/workflows/publish.yml` targets that environment.
+3. Tag a release:
 
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The publish workflow builds and uploads distributions via OIDC.
+## Pre-release checklist
 
-## Alpha Launch Checklist
+- `ruff check .`
+- `mypy terminal_demo_studio`
+- `pytest tests -v`
+- `tds validate examples/showcase/onboarding_tokyo_neon.yaml --explain`
+- `tds lint examples/showcase/autonomous_codex_real_short.yaml --strict`
+- `./scripts/install_context_smoke.sh` (non-Windows)
+- `./scripts/readme_smoke.sh` (Linux/macOS)
+- `./scripts/release_preflight.sh` (non-Windows)
+- `./scripts/render_showcase_media.sh` (refresh gallery media)
 
-- [ ] `ruff check .`
-- [ ] `mypy terminal_demo_studio`
-- [ ] `pytest tests -v`
-- [ ] `tds lint examples/real/autonomous_video_codex_hello_project_approval.yaml --strict`
-- [ ] `./scripts/install_context_smoke.sh` (non-Windows)
-- [ ] `./scripts/readme_smoke.sh` (Linux/macOS)
-- [ ] `./scripts/release_preflight.sh` (non-Windows)
-- [ ] README wow path is valid (`pipx install` + one-command `tds render`)
-- [ ] Six golden templates validate and scripted-render smoke successfully
-- [ ] Reusable GitHub action smoke passes in CI (`.github/actions/render`)
-- [ ] `docs/reproducibility.md` and stable/experimental messaging are accurate
-- [ ] Windows scripted CI parity remains explicitly documented as deferred
-
-## Skill Publishing
-
-No separate skill repository is required.
-
-1. Keep `skills/terminal-demo-studio/SKILL.md` in this repo.
-2. Keep frontmatter `name: terminal-demo-studio`.
-3. Remote install command:
-
-```bash
-npx skills add tomallicino/terminal-demo-studio --skill terminal-demo-studio
-```
-
-## Post-Publish Smoke
-
-After publish completes:
+## Post-release smoke
 
 ```bash
 python -m pip install --upgrade pip
 pip install terminal-demo-studio
 tds render --template install_first_command --output gif --output-dir outputs
 ```
+
+## Skill publishing
+
+Skill is versioned in this repo:
+
+- `skills/terminal-demo-studio/SKILL.md`
+
+Install command:
+
+```bash
+npx skills add tomallicino/terminal-demo-studio --skill terminal-demo-studio
+```
+
+## Release hygiene notes
+
+- Keep README command examples aligned with actual `tds --help` output.
+- Keep `CAPABILITIES.md` evidence links current as tests evolve.
+- Keep showcase assets in `docs/media` synced with screenplay sources in `examples/showcase`.

@@ -1,8 +1,8 @@
 # GitHub Action: Render Terminal Demos
 
-Use the reusable action at `.github/actions/render` to render a screenplay, upload artifacts, and optionally comment on pull requests.
+Use `.github/actions/render` to render a screenplay in CI, capture canonical outputs, and optionally post PR feedback.
 
-## Quick Copy/Paste
+## Quick start
 
 ```yaml
 name: render-demo
@@ -21,7 +21,7 @@ jobs:
         id: render
         uses: ./.github/actions/render
         with:
-          screenplay: examples/mock/install_first_command.yaml
+          screenplay: examples/showcase/onboarding_tokyo_neon.yaml
           mode: scripted_vhs
           outputs: gif,mp4
           output_dir: outputs
@@ -37,24 +37,30 @@ jobs:
 
 ## Inputs
 
-- `screenplay` (required): path to screenplay YAML.
-- `mode`: lane to execute (`scripted_vhs`, `autonomous_pty`, or `autonomous_video`) (default `scripted_vhs`).
-- `outputs`: comma-separated formats (`gif`, `mp4`) (default `gif`).
-- `output_dir`: output directory (default `outputs`).
-- `upload_artifact`: upload the run directory artifact (default `true`).
-- `artifact_name`: artifact name (default `tds-render-${{ github.run_id }}`).
-- `comment_pr`: comment summary on PR (default `false`).
-- `python_version`: Python version (default `3.11`).
+- `screenplay` (required): screenplay YAML path.
+- `mode`: `scripted_vhs`, `autonomous_pty`, or `autonomous_video` (default: `scripted_vhs`).
+- `outputs`: comma-separated output formats (`gif`, `mp4`) (default: `gif`).
+- `output_dir`: output directory (default: `outputs`).
+- `upload_artifact`: upload the run directory (default: `true`).
+- `artifact_name`: artifact name template (default: `tds-render-${{ github.run_id }}`).
+- `comment_pr`: post a result comment on PRs (default: `false`).
+- `python_version`: action runtime Python version (default: `3.11`).
 
 ## Outputs
 
-- `status`: run status (`success` or `failed`).
+- `status`: render status (`success` or `failed`).
 - `run_dir`: canonical run directory.
-- `media_paths`: comma-separated media files discovered from `tds` output.
+- `media_paths`: comma-separated media paths from `tds` output.
 
-## Notes
+## Behavior notes
 
-- The action is portable for `autonomous_pty` mode.
-- Scripted rendering dependencies are provisioned automatically on Linux/macOS.
-- `autonomous_video` requires visual runtime dependencies (`kitty`, `Xvfb`, `ffmpeg`) on the runner or a Docker-capable flow.
-- For scripted mode on Windows, use a local runner setup or defer to Linux/macOS workflows.
+- The action installs `terminal-demo-studio` from the current repository checkout.
+- Scripted dependencies are provisioned for Linux/macOS.
+- Scripted mode in this composite action intentionally fails on Windows.
+- Action runs `tds render ... --local`; use runner provisioning for visual mode dependencies.
+
+## Recommended CI pattern
+
+1. Run `tds validate` and `tds lint` before render for fast-fail behavior.
+2. Keep one smoke render in every PR.
+3. Upload the full `run_dir` artifact for reproducible debugging.

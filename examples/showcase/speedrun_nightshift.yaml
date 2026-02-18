@@ -1,0 +1,50 @@
+title: "Nightshift Speedrun"
+output: "showcase_speedrun_nightshift"
+variables:
+  demo_dir: "{{tmp_dir}}/tds_showcase_speedrun"
+settings:
+  width: 1400
+  height: 860
+  font_size: 21
+  font_family: "Monaco"
+  theme: "TokyoNightStorm"
+  padding: 24
+  margin: 14
+  margin_fill: "#0B1320"
+  border_radius: 14
+  window_bar: "Colorful"
+  framerate: 60
+  line_height: 1.12
+  letter_spacing: 1
+preinstall:
+  - "rm -rf {{demo_dir}} && mkdir -p {{demo_dir}}"
+  - |
+    cat > {{demo_dir}}/release_gate.sh <<'SH'
+    echo "lint:ok"
+    echo "types:ok"
+    echo "tests:ok"
+    echo "package:ok"
+    echo "publish:ready"
+    SH
+  - "chmod +x {{demo_dir}}/release_gate.sh"
+scenarios:
+  - label: "Release Sweep"
+    surface: "terminal"
+    prompt:
+      style: "macos"
+      user: "ops"
+      host: "shipyard"
+      path: "basename"
+      symbol: "%"
+    setup:
+      - "cd {{demo_dir}}"
+      - "clear"
+    actions:
+      - type: "./release_gate.sh"
+      - wait_for: "lint:ok"
+        wait_mode: "screen"
+        wait_timeout: "5s"
+      - wait_for: "publish:ready"
+        wait_mode: "screen"
+        wait_timeout: "5s"
+      - sleep: "700ms"
