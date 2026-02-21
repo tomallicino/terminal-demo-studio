@@ -338,6 +338,35 @@ Full-screen TUI capture. Launches a Kitty terminal on a virtual X display, sends
 tds run screenplay.yaml --mode visual --output mp4
 ```
 
+### How the visual lane works
+
+The visual lane (`autonomous_video`) captures any interactive TUI &mdash; Claude Code, Codex, htop, vim &mdash; by driving a real terminal emulator:
+
+```
+┌─────────────┐      keystrokes       ┌──────────────┐      video      ┌───────────┐
+│  tds render │  ──────────────────▶   │ Kitty on Xvfb│  ───────────▶  │  ffmpeg   │
+│  (driver)   │  ◀──────────────────   │ (real TTY)   │                │  GIF/MP4  │
+└─────────────┘    screen captures     └──────────────┘                └───────────┘
+       │                                      │
+       ▼                                      ▼
+  wait_for / assert               agent prompt detection
+  (regex on screen)               (approve / deny / manual)
+```
+
+1. **Xvfb** provides a headless X display (no monitor needed)
+2. **Kitty** runs the target TUI on that display with full GPU-accelerated rendering
+3. **tds** sends keystrokes via Kitty's remote control protocol and reads the terminal screen
+4. **ffmpeg** records the display output into GIF/MP4
+5. **Prompt policies** automatically handle approval dialogs from AI agents (configurable approve/deny/manual modes with regex matching and bounded rounds)
+
+The easiest way to try it is via Docker &mdash; no host setup required:
+
+```bash
+tds render screenplay.yaml --mode visual --docker --output mp4
+```
+
+See the [autonomous roadmap](docs/autonomous-roadmap.md) for supported primitives and planned work.
+
 ---
 
 ## Screenplay format
