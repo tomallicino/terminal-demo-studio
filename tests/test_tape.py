@@ -90,7 +90,7 @@ def test_compile_tape_supports_macos_prompt_setup() -> None:
     tape = compile_tape(scenario, settings, ["scene.mp4"])
 
     assert "Hide" in tape
-    assert "Type \"export PS1='dev@workstation ${PWD} % '\"" in tape
+    assert "Type \"export PS1='\\\\ndev@workstation ${PWD} % '\"" in tape
     assert "Type \"clear\"" in tape
     assert "Show" in tape
 
@@ -105,7 +105,7 @@ def test_compile_tape_supports_macos_prompt_basename_path() -> None:
 
     tape = compile_tape(scenario, settings, ["scene.mp4"])
 
-    assert "Type \"export PS1='dev@mbp ${PWD##*/} % '\"" in tape
+    assert "Type \"export PS1='\\\\ndev@mbp ${PWD##*/} % '\"" in tape
 
 
 def test_compile_tape_supports_command_key_and_hotkey_actions() -> None:
@@ -144,7 +144,7 @@ def test_compile_tape_supports_venv_prompt_setup() -> None:
 
     tape = compile_tape(scenario, settings, ["scene.mp4"])
 
-    assert "Type \"export PS1='(.venv) dev@workstation ${PWD##*/} $ '\"" in tape
+    assert "Type \"export PS1='\\\\n(.venv) dev@workstation ${PWD##*/} $ '\"" in tape
 
 
 def test_compile_tape_splits_multiline_commands_into_safe_lines() -> None:
