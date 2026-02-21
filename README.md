@@ -23,21 +23,152 @@
 
 ## Quickstart
 
+### 1. First render (2 minutes)
+
 ```bash
 pip install terminal-demo-studio
 tds init --destination my_demo
 tds render my_demo/screenplays/getting_started.yaml --mode scripted --local --output gif --output-dir my_demo/outputs
 ```
 
-That's it. Your GIF is in `my_demo/outputs/`.
+Your GIF is in `my_demo/outputs/`. Use `--docker` instead of `--local` if you don't have vhs/ffmpeg installed &mdash; Docker bundles everything automatically.
 
-### Using Docker (zero local dependencies)
+### 2. Connect your agent (30 seconds)
+
+Give Claude Code, Cursor, or Windsurf full access to render, validate, lint, and debug demos &mdash; no shell parsing needed.
+
+<details>
+<summary><b>Claude Code</b></summary>
 
 ```bash
-tds render my_demo/screenplays/getting_started.yaml --docker --output gif --output-dir my_demo/outputs
+pip install terminal-demo-studio[mcp]
+claude mcp add terminal-demo-studio -- tds-mcp
 ```
 
-Docker mode bundles all system dependencies (vhs, ffmpeg, kitty, xvfb) automatically.
+Done. Claude Code can now call `tds_render`, `tds_validate`, `tds_lint`, `tds_debug`, `tds_list_templates`, and `tds_doctor` as native tools.
+
+</details>
+
+<details>
+<summary><b>Cursor / Windsurf / any MCP client</b></summary>
+
+```bash
+pip install terminal-demo-studio[mcp]
+```
+
+Add to your project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "terminal-demo-studio": {
+      "type": "stdio",
+      "command": "tds-mcp"
+    }
+  }
+}
+```
+
+The agent now has 6 tools available: `tds_render`, `tds_validate`, `tds_lint`, `tds_debug`, `tds_list_templates`, `tds_doctor`.
+
+</details>
+
+<details>
+<summary><b>Any agent via CLI output contract</b></summary>
+
+No MCP needed. Every `tds render` emits machine-readable keys that any agent can parse:
+
+```bash
+tds render screenplay.yaml --mode scripted --output gif --output-dir outputs
+```
+
+```
+STATUS=success
+RUN_DIR=outputs/.terminal_demo_studio_runs/run-abc123
+MEDIA_GIF=outputs/.terminal_demo_studio_runs/run-abc123/media/demo.gif
+SUMMARY=outputs/.terminal_demo_studio_runs/run-abc123/summary.json
+```
+
+Add this to your agent's system prompt or CLAUDE.md:
+
+```text
+Use `tds render <screenplay> --mode scripted --output gif --output-dir outputs` to render terminal demos.
+Parse STATUS, RUN_DIR, and MEDIA_GIF from stdout.
+If STATUS=failed, run `tds debug <RUN_DIR> --json` and fix the screenplay.
+```
+
+</details>
+
+### 3. Keep demos fresh in CI (1 minute)
+
+Add this workflow to auto-render GIFs whenever screenplays or source code change on `main`:
+
+```yaml
+# .github/workflows/auto-update-media.yml
+name: auto-update-demo-media
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'examples/showcase/**/*.yaml'
+      - 'your_package/**'             # your source code path
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.22" }
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg ttyd
+          go install github.com/charmbracelet/vhs@v0.10.0
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+          pip install -e .
+
+      - name: Render and commit
+        run: |
+          mkdir -p docs/media
+          for f in examples/showcase/*.yaml; do
+            stem=$(basename "$f" .yaml)
+            tds render "$f" --mode scripted_vhs --local --output gif --output-dir outputs || true
+            find outputs -name "${stem}.*" -path "*/media/*" -exec cp {} docs/media/ \; 2>/dev/null || true
+          done
+          git config user.email "action@github.com"
+          git config user.name "github-actions"
+          git add docs/media/
+          git diff --cached --quiet || (git commit -m "ci: auto-update demo media" && git push)
+```
+
+Or use the built-in composite action for per-PR rendering:
+
+```yaml
+- uses: tomallicino/terminal-demo-studio/.github/actions/render@main
+  with:
+    screenplay: examples/showcase/onboarding_tokyo_neon.yaml
+    mode: scripted_vhs
+    outputs: gif
+    upload_artifact: true
+```
+
+See the [GitHub Action guide](docs/github-action.md) for full options.
+
+### 4. Live editing loop
+
+Watch a screenplay and auto-render on every save:
+
+```bash
+tds watch screenplay.yaml --mode scripted --output gif --output-dir outputs
+```
 
 ---
 
@@ -372,65 +503,31 @@ Failed runs produce a diagnostic bundle at `failure/`:
 
 ## GitHub Action
 
-Add to your CI workflow:
+See the [Quickstart](#3-keep-demos-fresh-in-ci-1-minute) for setup. Full options in the [GitHub Action guide](docs/github-action.md).
 
-```yaml
-- uses: tomallicino/terminal-demo-studio/.github/actions/render@main
-  with:
-    screenplay: examples/showcase/onboarding_tokyo_neon.yaml
-    mode: scripted_vhs
-    outputs: gif
-    output_dir: outputs
-    upload_artifact: true
-    comment_pr: true
-```
-
-Keep demo GIFs fresh automatically &mdash; the [auto-update workflow](docs/github-action.md#auto-update-demo-media-on-code-changes) re-renders showcase media whenever screenplays or source code change on `main`.
-
-See the [GitHub Action guide](docs/github-action.md) for full options.
+| Input | Default | Description |
+|-------|---------|-------------|
+| `screenplay` | (required) | Screenplay YAML path |
+| `mode` | `scripted_vhs` | Execution lane |
+| `outputs` | `gif` | Comma-separated formats (`gif`, `mp4`) |
+| `output_dir` | `outputs` | Output directory |
+| `upload_artifact` | `true` | Upload run directory as artifact |
+| `comment_pr` | `false` | Post result comment on PRs |
 
 ---
 
 ## Agent integration
 
-### MCP server (Claude Code, Cursor, Windsurf)
+See the [Quickstart](#2-connect-your-agent-30-seconds) for setup. Once connected, agents have access to 6 MCP tools:
 
-Install with MCP support and register the server:
-
-```bash
-pip install terminal-demo-studio[mcp]
-```
-
-Add to your project's `.mcp.json` (or configure via `claude mcp add`):
-
-```json
-{
-  "mcpServers": {
-    "terminal-demo-studio": {
-      "type": "stdio",
-      "command": "tds-mcp"
-    }
-  }
-}
-```
-
-The MCP server exposes 6 tools: `tds_render`, `tds_validate`, `tds_lint`, `tds_debug`, `tds_list_templates`, `tds_doctor`. Agents can call these directly without shell parsing.
-
-### Live editing with `tds watch`
-
-Edit a screenplay, see results instantly:
-
-```bash
-tds watch screenplay.yaml --mode scripted --output gif --output-dir outputs
-```
-
-The watcher polls for file changes, debounces saves, and re-renders automatically. Pair it with a GIF viewer for a live preview loop.
-
-### Install as a skill
-
-```bash
-npx skills add tomallicino/terminal-demo-studio --skill terminal-demo-studio
-```
+| Tool | What it does |
+|------|-------------|
+| `tds_render` | Render a screenplay to GIF/MP4 |
+| `tds_validate` | Parse and validate screenplay YAML |
+| `tds_lint` | Check for policy and safety violations |
+| `tds_debug` | Inspect run artifacts and failure diagnostics |
+| `tds_list_templates` | List available screenplay templates |
+| `tds_doctor` | Check environment readiness |
 
 ### Example agent prompt
 
@@ -439,6 +536,17 @@ Render examples/showcase/policy_nord_guard.yaml in scripted mode.
 Return STATUS, RUN_DIR, MEDIA_GIF, MEDIA_MP4, and SUMMARY.
 If status is failed, run `tds debug <run_dir> --json` and summarize root cause.
 ```
+
+### Autonomous workflow
+
+An agent with TDS connected can maintain your demo media end-to-end:
+
+1. **Create** &mdash; `tds_list_templates` &rarr; pick a template &rarr; write a screenplay
+2. **Validate** &mdash; `tds_validate` to catch schema errors before rendering
+3. **Lint** &mdash; `tds_lint --strict` to enforce safety policies
+4. **Render** &mdash; `tds_render` to produce the GIF/MP4
+5. **Debug** &mdash; if render fails, `tds_debug` reads the failure bundle and suggests fixes
+6. **Watch** &mdash; `tds watch` for live iteration during screenplay editing
 
 ### Output contract
 
