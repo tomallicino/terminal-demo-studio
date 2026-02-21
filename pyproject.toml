@@ -4,16 +4,34 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "terminal-demo-studio"
-version = "0.1.0"
-description = "Deterministic, agent-native terminal demo pipeline"
+version = "0.2.0"
+description = "Deterministic, agent-native terminal demo pipeline — turn YAML screenplays into repeatable GIF/MP4 terminal demos"
 readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Documentation",
+  "Topic :: Multimedia :: Video",
+  "Typing :: Typed",
+]
 dependencies = [
   "click==8.3.1",
   "Pillow==11.3.0",
   "pydantic==2.12.5",
   "PyYAML==6.0.3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/tomallicino/terminal-demo-studio"
+Repository = "https://github.com/tomallicino/terminal-demo-studio"
+Issues = "https://github.com/tomallicino/terminal-demo-studio/issues"
 
 [project.optional-dependencies]
 dev = [
