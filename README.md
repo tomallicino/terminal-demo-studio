@@ -183,6 +183,13 @@ tds render <screenplay.yaml>       Render a screenplay to GIF/MP4
 
 tds run <screenplay.yaml>          Alias for render (same options)
 
+tds watch <screenplay.yaml>       Watch and auto-render on changes
+    --mode auto|scripted|interactive|visual
+    --docker | --local              Runtime location
+    --output gif|mp4                Output format (repeat for both)
+    --output-dir PATH               Output directory
+    --debounce DURATION             Re-render debounce (default: 1000ms)
+
 tds validate <screenplay.yaml>     Validate YAML schema
     --json-schema                   Print JSON schema
     --explain                       Show screenplay summary
@@ -300,6 +307,29 @@ See the [GitHub Action guide](docs/github-action.md) for full options.
 ---
 
 ## Agent integration
+
+### MCP server (Claude Code, Cursor, Windsurf)
+
+Install with MCP support and register the server:
+
+```bash
+pip install terminal-demo-studio[mcp]
+```
+
+Add to your project's `.mcp.json` (or configure via `claude mcp add`):
+
+```json
+{
+  "mcpServers": {
+    "terminal-demo-studio": {
+      "type": "stdio",
+      "command": "tds-mcp"
+    }
+  }
+}
+```
+
+The MCP server exposes 6 tools: `tds_render`, `tds_validate`, `tds_lint`, `tds_debug`, `tds_list_templates`, `tds_doctor`. Agents can call these directly without shell parsing.
 
 ### Install as a skill
 

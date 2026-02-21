@@ -617,6 +617,115 @@ def run(
     )
 
 
+@app.command("watch")
+@click.argument("screenplay", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "use_docker",
+    "--docker/--local",
+    default=None,
+    help="Runtime location (local machine or Docker container).",
+)
+@click.option("output_dir", "--output-dir", type=click.Path(path_type=Path), default=None)
+@click.option(
+    "playback_mode",
+    "--playback",
+    type=click.Choice(["sequential", "simultaneous"], case_sensitive=False),
+    default="sequential",
+    show_default=True,
+)
+@click.option(
+    "output_formats",
+    "--output",
+    type=click.Choice(["mp4", "gif"], case_sensitive=False),
+    multiple=True,
+    help="Output format(s). Repeat to request multiple. Defaults to both.",
+)
+@click.option(
+    "run_mode",
+    "--mode",
+    type=click.Choice(
+        [
+            "auto",
+            "scripted",
+            "interactive",
+            "visual",
+            "video",
+            "scripted_vhs",
+            "autonomous_pty",
+            "autonomous_video",
+        ],
+        case_sensitive=False,
+    ),
+    default="auto",
+    show_default=True,
+    help="Execution lane.",
+)
+@click.option(
+    "agent_prompt_mode",
+    "--agent-prompts",
+    type=click.Choice(["auto", "manual", "approve", "deny"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="How visual lane handles approval prompts.",
+)
+@click.option(
+    "media_redact_mode",
+    "--redact",
+    type=click.Choice(["auto", "off", "input_line"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="Media redaction mode.",
+)
+@click.option(
+    "debounce",
+    "--debounce",
+    default="1000ms",
+    show_default=True,
+    help="Re-render debounce interval (e.g. 500ms, 2s).",
+)
+def watch(
+    screenplay: Path,
+    use_docker: bool | None,
+    output_dir: Path | None,
+    playback_mode: str,
+    output_formats: tuple[str, ...],
+    run_mode: str,
+    agent_prompt_mode: str,
+    media_redact_mode: str,
+    debounce: str,
+) -> None:
+    """Watch a screenplay file and auto-render on changes."""
+    import re as _re
+
+    from terminal_demo_studio.watch import run_watch
+
+    duration_match = _re.match(r"^(\d+)(ms|s)$", debounce)
+    if not duration_match:
+        raise click.ClickException(f"Invalid debounce duration: {debounce!r} (use e.g. 500ms, 2s)")
+    value, unit = int(duration_match.group(1)), duration_match.group(2)
+    debounce_seconds = value / 1000.0 if unit == "ms" else float(value)
+
+    def do_render() -> None:
+        _execute_render(
+            screenplay=screenplay,
+            use_docker=use_docker,
+            output_dir=output_dir,
+            keep_temp=False,
+            rebuild=False,
+            playback_mode=playback_mode,
+            output_formats=output_formats,
+            run_mode=run_mode,
+            agent_prompt_mode=agent_prompt_mode,
+            media_redact_mode=media_redact_mode,
+        )
+
+    run_watch(
+        screenplay=screenplay,
+        debounce_seconds=debounce_seconds,
+        render_fn=do_render,
+    )
+
+
 @app.command("validate")
 @click.argument("screenplay", type=click.Path(exists=True, path_type=Path))
 @click.option("show_json_schema", "--json-schema", is_flag=True, default=False)

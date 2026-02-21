@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "terminal-demo-studio": {
+      "type": "stdio",
+      "command": "tds-mcp"
+    }
+  }
+}

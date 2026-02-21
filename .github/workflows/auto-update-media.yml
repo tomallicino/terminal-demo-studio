@@ -1,0 +1,79 @@
+name: auto-update-demo-media
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'examples/showcase/**/*.yaml'
+      - 'terminal_demo_studio/**'
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg ttyd
+          go install github.com/charmbracelet/vhs@v0.10.0
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Install terminal-demo-studio
+        run: pip install -e .
+
+      - name: Detect changed screenplays
+        id: detect
+        run: |
+          # Check if showcase screenplays changed
+          changed=$(git diff HEAD~1 HEAD --name-only -- 'examples/showcase/*.yaml' 2>/dev/null || true)
+          if [ -z "$changed" ]; then
+            # Source code changed but no screenplays — re-render all showcase
+            changed=$(ls examples/showcase/*.yaml 2>/dev/null || true)
+          fi
+          echo "files<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$changed" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "Screenplays to render:"
+          echo "$changed"
+
+      - name: Render screenplays
+        if: steps.detect.outputs.files != ''
+        run: |
+          mkdir -p docs/media
+          while IFS= read -r screenplay; do
+            [ -z "$screenplay" ] && continue
+            [ ! -f "$screenplay" ] && continue
+            stem=$(basename "$screenplay" .yaml)
+            echo "::group::Rendering $screenplay"
+            tds render "$screenplay" --mode scripted_vhs --local \
+              --output gif --output-dir outputs || true
+            find outputs -name "${stem}.*" -path "*/media/*" \
+              -exec cp {} docs/media/ \; 2>/dev/null || true
+            echo "::endgroup::"
+          done <<< "${{ steps.detect.outputs.files }}"
+
+      - name: Commit updated media
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "github-actions"
+          git add docs/media/
+          git diff --cached --quiet || \
+            (git commit -m "ci: auto-update demo media" && git push)

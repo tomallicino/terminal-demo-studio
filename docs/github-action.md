@@ -64,3 +64,69 @@ jobs:
 1. Run `tds validate` and `tds lint` before render for fast-fail behavior.
 2. Keep one smoke render in every PR.
 3. Upload the full `run_dir` artifact for reproducible debugging.
+
+## Auto-update demo media on code changes
+
+Add this workflow to automatically re-render showcase GIFs when screenplays or source code change on `main`:
+
+```yaml
+name: auto-update-demo-media
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'examples/showcase/**/*.yaml'
+      - 'terminal_demo_studio/**'
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg ttyd
+          go install github.com/charmbracelet/vhs@v0.10.0
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+          pip install -e .
+
+      - name: Detect and render changed screenplays
+        run: |
+          changed=$(git diff HEAD~1 HEAD --name-only -- 'examples/showcase/*.yaml' || true)
+          [ -z "$changed" ] && changed=$(ls examples/showcase/*.yaml 2>/dev/null || true)
+          mkdir -p docs/media
+          echo "$changed" | while IFS= read -r f; do
+            [ -z "$f" ] || [ ! -f "$f" ] && continue
+            stem=$(basename "$f" .yaml)
+            tds render "$f" --mode scripted_vhs --local --output gif --output-dir outputs || true
+            find outputs -name "${stem}.*" -path "*/media/*" -exec cp {} docs/media/ \; 2>/dev/null || true
+          done
+
+      - name: Commit updated media
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "github-actions"
+          git add docs/media/
+          git diff --cached --quiet || (git commit -m "ci: auto-update demo media" && git push)
+```
+
+This workflow:
+- Triggers on pushes to `main` that touch screenplays or source code
+- Detects which screenplays changed (or re-renders all if only source changed)
+- Renders each screenplay in `scripted_vhs` mode
+- Commits updated media back to the repository
