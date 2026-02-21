@@ -15,7 +15,7 @@ def test_compute_image_tag_is_stable_for_same_inputs(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
     assets = tmp_path / "assets"
     assets.mkdir()
-    (assets / "starship.toml").write_text("add_newline = false\n", encoding="utf-8")
+    (assets / "starship.toml").write_text("add_newline = true\n", encoding="utf-8")
 
     a = compute_image_tag(tmp_path)
     b = compute_image_tag(tmp_path)

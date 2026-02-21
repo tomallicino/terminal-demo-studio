@@ -46,9 +46,9 @@ def _prompt_setup_command(prompt: PromptSettings) -> str:
     path_token = "${PWD##*/}" if prompt.path == "basename" else "${PWD}"
     if prompt.style == "venv":
         env_name = prompt.env or ".venv"
-        ps1_value = f"({env_name}) {prompt.user}@{prompt.host} {path_token} {prompt.symbol} "
+        ps1_value = f"\\n({env_name}) {prompt.user}@{prompt.host} {path_token} {prompt.symbol} "
     else:
-        ps1_value = f"{prompt.user}@{prompt.host} {path_token} {prompt.symbol} "
+        ps1_value = f"\\n{prompt.user}@{prompt.host} {path_token} {prompt.symbol} "
     escaped = _escape_single_quotes(ps1_value)
     return f"export PS1='{escaped}'"
 

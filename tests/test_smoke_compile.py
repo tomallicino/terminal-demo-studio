@@ -36,5 +36,5 @@ def test_single_prompt_macos_demo_compiles_to_tape() -> None:
 
     tape = compile_tape(screenplay.scenarios[0], screenplay.settings, ["scene_0.mp4"])
 
-    assert "Type \"export PS1='dev@workstation ${PWD##*/} % '\"" in tape
+    assert "Type \"export PS1='\\\\ndev@workstation ${PWD##*/} % '\"" in tape
     assert "Wait+Screen@8s /OK/" in tape
