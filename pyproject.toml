@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "terminal-demo-studio"
-version = "0.2.0"
+version = "0.3.0"
 description = "Deterministic, agent-native terminal demo pipeline — turn YAML screenplays into repeatable GIF/MP4 terminal demos"
 readme = "README.md"
 requires-python = ">=3.11"
