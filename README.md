@@ -16,7 +16,7 @@
 - **YAML in, GIF/MP4 out.** Define a screenplay, get a repeatable demo video. No screen recording by hand.
 - **Three execution lanes.** Polished scripted renders, command/assert automation, or full-screen TUI capture with live keyboard interaction.
 - **Captures complex TUIs.** Claude Code, Codex, htop, vim, any interactive terminal app &mdash; rendered through a real terminal emulator (Kitty), not a text-mode simulator.
-- **Agent-native.** Machine-readable output contract (`STATUS`, `RUN_DIR`, `MEDIA_GIF`, `SUMMARY`, `EVENTS`) that agents can parse and act on.
+- **Agent-native.** MCP server with 6 tools, machine-readable output contract, and a `tds watch` loop for live editing. Agents render, validate, lint, and debug without shell parsing.
 - **Safe by default.** Prompt-loop policies, lint gates, media redaction, bounded waits, and failure bundles with redacted diagnostics.
 
 ---
@@ -55,6 +55,132 @@ Docker mode bundles all system dependencies (vhs, ffmpeg, kitty, xvfb) automatic
 
 ---
 
+## Showcase gallery
+
+Every GIF below was generated from a YAML screenplay in this repo. Each one is fully reproducible &mdash; clone, render, done.
+
+### Real agent TUI capture
+
+The visual lane captures real interactive TUIs with live keyboard interaction, approval-prompt handling, and full-screen recording.
+
+<table>
+<tr>
+<td width="50%">
+
+**Claude Code** &mdash; real onboarding flow with OAuth prompts and interactive session
+
+![Claude Code](docs/media/autonomous_claude_real_short.gif)
+
+[GIF](docs/media/autonomous_claude_real_short.gif) &middot; [MP4](docs/media/autonomous_claude_real_short.mp4) &middot; [YAML](examples/showcase/autonomous_claude_real_short.yaml)
+
+</td>
+<td width="50%">
+
+**Codex** &mdash; builds and verifies a hello-world app through the Codex TUI
+
+![Codex](docs/media/autonomous_codex_real_short.gif)
+
+[GIF](docs/media/autonomous_codex_real_short.gif) &middot; [MP4](docs/media/autonomous_codex_real_short.mp4) &middot; [YAML](examples/showcase/autonomous_codex_real_short.yaml)
+
+</td>
+</tr>
+</table>
+
+### Themed scripted demos
+
+Pixel-perfect renders across six popular terminal themes. Each uses a different font, color scheme, and workflow pattern.
+
+| Demo | Theme | Font | Preview |
+|------|-------|------|---------|
+| [Onboarding Neon](examples/showcase/onboarding_tokyo_neon.yaml) | TokyoNightStorm | Menlo | ![](docs/media/onboarding_tokyo_neon.gif) |
+| [Bugfix Glow](examples/showcase/bugfix_catppuccin_glow.yaml) | Catppuccin Mocha | Monaco | ![](docs/media/bugfix_catppuccin_glow.gif) |
+| [Recovery Retro](examples/showcase/recovery_gruvbox_retro.yaml) | GruvboxDark | Courier New | ![](docs/media/recovery_gruvbox_retro.gif) |
+| [Policy Guard](examples/showcase/policy_nord_guard.yaml) | Nord | SF Mono | ![](docs/media/policy_nord_guard.gif) |
+| [Menu Contrast](examples/showcase/menu_dracula_contrast.yaml) | Dracula | Courier | ![](docs/media/menu_dracula_contrast.gif) |
+| [Nightshift Speedrun](examples/showcase/speedrun_nightshift.yaml) | TokyoNightStorm | Monaco | ![](docs/media/speedrun_nightshift.gif) |
+
+### Starter patterns
+
+Ready-to-use templates that demonstrate common demo patterns. Great starting points for your own screenplays.
+
+| Demo | Pattern | Preview |
+|------|---------|---------|
+| [Install First Command](examples/mock/install_first_command.yaml) | Quickstart onboarding &mdash; pip install, first render, output | ![](docs/media/install_first_command.gif) |
+| [Before & After Bugfix](examples/mock/before_after_bugfix.yaml) | Two-scene comparison &mdash; failing tests, then the fix | ![](docs/media/before_after_bugfix.gif) |
+| [Error Then Fix](examples/mock/error_then_fix.yaml) | Error diagnosis &mdash; stack trace, root cause, resolution | ![](docs/media/error_then_fix.gif) |
+| [Interactive Menu](examples/mock/interactive_menu_showcase.yaml) | TUI navigation &mdash; arrow keys, selection, confirmation | ![](docs/media/interactive_menu_showcase.gif) |
+| [Policy Warning Gate](examples/mock/policy_warning_gate.yaml) | Safety enforcement &mdash; blocked action, policy explanation | ![](docs/media/policy_warning_gate.gif) |
+| [Speedrun Cuts](examples/mock/speedrun_cuts.yaml) | CI pipeline &mdash; lint, test, build, deploy in rapid sequence | ![](docs/media/speedrun_cuts.gif) |
+
+Regenerate all showcase media:
+
+```bash
+./scripts/render_showcase_media.sh
+```
+
+---
+
+## Screenplay catalog
+
+**28 screenplays** ship with the repo across three categories. Use them as-is or as templates for your own demos.
+
+### Showcase (`examples/showcase/`) &mdash; polished, theme-styled demos
+
+| Screenplay | Lane | Theme |
+|------------|------|-------|
+| [`onboarding_tokyo_neon.yaml`](examples/showcase/onboarding_tokyo_neon.yaml) | scripted | TokyoNightStorm |
+| [`bugfix_catppuccin_glow.yaml`](examples/showcase/bugfix_catppuccin_glow.yaml) | scripted | Catppuccin Mocha |
+| [`recovery_gruvbox_retro.yaml`](examples/showcase/recovery_gruvbox_retro.yaml) | scripted | GruvboxDark |
+| [`policy_nord_guard.yaml`](examples/showcase/policy_nord_guard.yaml) | scripted | Nord |
+| [`menu_dracula_contrast.yaml`](examples/showcase/menu_dracula_contrast.yaml) | scripted | Dracula |
+| [`speedrun_nightshift.yaml`](examples/showcase/speedrun_nightshift.yaml) | scripted | TokyoNightStorm |
+| [`autonomous_claude_real_short.yaml`](examples/showcase/autonomous_claude_real_short.yaml) | autonomous_video | TokyoNightStorm |
+| [`autonomous_codex_real_short.yaml`](examples/showcase/autonomous_codex_real_short.yaml) | autonomous_video | GruvboxDark |
+
+### Mock (`examples/mock/`) &mdash; lightweight patterns for testing and learning
+
+| Screenplay | Pattern |
+|------------|---------|
+| [`install_first_command.yaml`](examples/mock/install_first_command.yaml) | Quickstart onboarding |
+| [`before_after_bugfix.yaml`](examples/mock/before_after_bugfix.yaml) | Two-scene before/after |
+| [`error_then_fix.yaml`](examples/mock/error_then_fix.yaml) | Error diagnosis and fix |
+| [`interactive_menu_showcase.yaml`](examples/mock/interactive_menu_showcase.yaml) | Arrow-key TUI menu |
+| [`policy_warning_gate.yaml`](examples/mock/policy_warning_gate.yaml) | Safety policy gate |
+| [`speedrun_cuts.yaml`](examples/mock/speedrun_cuts.yaml) | Rapid CI pipeline |
+| [`agent_loop.yaml`](examples/mock/agent_loop.yaml) | Agent tool-call loop |
+| [`list_detail_flow.yaml`](examples/mock/list_detail_flow.yaml) | List &rarr; detail drill-down |
+| [`safety_wizard.yaml`](examples/mock/safety_wizard.yaml) | Multi-step safety wizard |
+| [`render_smoke.yaml`](examples/mock/render_smoke.yaml) | Minimal smoke test |
+| [`autonomous_video_claude_like.yaml`](examples/mock/autonomous_video_claude_like.yaml) | Mock Claude TUI |
+| [`autonomous_video_codex_like.yaml`](examples/mock/autonomous_video_codex_like.yaml) | Mock Codex TUI |
+
+### Real (`examples/real/`) &mdash; actual agent executions for integration testing
+
+| Screenplay | Description |
+|------------|-------------|
+| [`autonomous_video_codex_cli.yaml`](examples/real/autonomous_video_codex_cli.yaml) | Codex CLI basic session |
+| [`autonomous_video_codex_complex_verified.yaml`](examples/real/autonomous_video_codex_complex_verified.yaml) | Complex multi-step Codex workflow |
+| [`autonomous_video_codex_hello_project_approval.yaml`](examples/real/autonomous_video_codex_hello_project_approval.yaml) | Codex with approval prompts accepted |
+| [`autonomous_video_codex_hello_project_deny.yaml`](examples/real/autonomous_video_codex_hello_project_deny.yaml) | Codex with approval prompts denied |
+| [`autonomous_video_codex_multiturn.yaml`](examples/real/autonomous_video_codex_multiturn.yaml) | Multi-turn Codex conversation |
+| [`autonomous_video_codex_patch_flow.yaml`](examples/real/autonomous_video_codex_patch_flow.yaml) | Codex patch review flow |
+| [`real_agent_demo.yaml`](examples/real/real_agent_demo.yaml) | General agent demo session |
+
+### Production screenplays (`screenplays/`) &mdash; complete workflow demos
+
+| Screenplay | Theme | What it demonstrates |
+|------------|-------|---------------------|
+| [`dev_bugfix_workflow.yaml`](screenplays/dev_bugfix_workflow.yaml) | TokyoNightStorm | Developer bugfix: regression in `add()`, unit tests fail, fix, tests pass |
+| [`drift_protection.yaml`](screenplays/drift_protection.yaml) | TokyoNightStorm | Drift protection: unsafe tool execution vs. policy-guarded safe mode |
+| [`single_prompt_macos_demo.yaml`](screenplays/single_prompt_macos_demo.yaml) | TokyoNightStorm | Log triage with macOS-style prompt, failure parsing, error pattern display |
+| [`rust_cli_demo.yaml`](screenplays/rust_cli_demo.yaml) | Catppuccin Mocha | Rust binary safety guard: unguarded deletion vs. policy-checked execution |
+| [`agent_generated_feature_flag_fix.yaml`](screenplays/agent_generated_feature_flag_fix.yaml) | Nord | Feature flag bugfix: checkout flag misconfigured, tests fail, reconfigure, pass |
+| [`agent_generated_policy_guard.yaml`](screenplays/agent_generated_policy_guard.yaml) | Catppuccin Mocha | Agent safety policy: raw PII export blocked, routed to secure vault |
+| [`agent_generated_release_check.yaml`](screenplays/agent_generated_release_check.yaml) | GruvboxDark | Release compliance: lockfile, security scan, changelog, approver signoff |
+| [`agent_generated_triage.yaml`](screenplays/agent_generated_triage.yaml) | Catppuccin Mocha | Agent triage: unguided output fails validation vs. guided output passes |
+
+---
+
 ## Three execution lanes
 
 ### Scripted (`--mode scripted`)
@@ -79,49 +205,6 @@ Full-screen TUI capture. Launches a Kitty terminal on a virtual X display, sends
 
 ```bash
 tds run screenplay.yaml --mode visual --output mp4
-```
-
----
-
-## Capturing complex TUIs
-
-The visual lane can capture any interactive terminal application. Here are real demos generated from YAML screenplays:
-
-### Claude Code (autonomous_video)
-
-Captures a real Claude Code session &mdash; onboarding flow, interactive prompts, and all.
-
-![Claude Code Demo](docs/media/autonomous_claude_real_short.gif)
-
-[GIF](docs/media/autonomous_claude_real_short.gif) &middot; [MP4](docs/media/autonomous_claude_real_short.mp4) &middot; [YAML](examples/showcase/autonomous_claude_real_short.yaml)
-
-### Codex (autonomous_video)
-
-Builds and verifies a hello-world app through the Codex TUI.
-
-![Codex Demo](docs/media/autonomous_codex_real_short.gif)
-
-[GIF](docs/media/autonomous_codex_real_short.gif) &middot; [MP4](docs/media/autonomous_codex_real_short.mp4) &middot; [YAML](examples/showcase/autonomous_codex_real_short.yaml)
-
----
-
-## Showcase gallery
-
-All scripted demos below were generated from YAML screenplays in this repo.
-
-| Demo | Theme | Preview |
-|------|-------|---------|
-| [Onboarding Neon](examples/showcase/onboarding_tokyo_neon.yaml) | TokyoNightStorm | ![](docs/media/onboarding_tokyo_neon.gif) |
-| [Bugfix Glow](examples/showcase/bugfix_catppuccin_glow.yaml) | Catppuccin Mocha | ![](docs/media/bugfix_catppuccin_glow.gif) |
-| [Recovery Retro](examples/showcase/recovery_gruvbox_retro.yaml) | GruvboxDark | ![](docs/media/recovery_gruvbox_retro.gif) |
-| [Policy Guard](examples/showcase/policy_nord_guard.yaml) | Nord | ![](docs/media/policy_nord_guard.gif) |
-| [Menu Contrast](examples/showcase/menu_dracula_contrast.yaml) | Dracula | ![](docs/media/menu_dracula_contrast.gif) |
-| [Nightshift Speedrun](examples/showcase/speedrun_nightshift.yaml) | TokyoNightStorm | ![](docs/media/speedrun_nightshift.gif) |
-
-Regenerate all showcase media:
-
-```bash
-./scripts/render_showcase_media.sh
 ```
 
 ---
@@ -302,6 +385,8 @@ Add to your CI workflow:
     comment_pr: true
 ```
 
+Keep demo GIFs fresh automatically &mdash; the [auto-update workflow](docs/github-action.md#auto-update-demo-media-on-code-changes) re-renders showcase media whenever screenplays or source code change on `main`.
+
 See the [GitHub Action guide](docs/github-action.md) for full options.
 
 ---
@@ -330,6 +415,16 @@ Add to your project's `.mcp.json` (or configure via `claude mcp add`):
 ```
 
 The MCP server exposes 6 tools: `tds_render`, `tds_validate`, `tds_lint`, `tds_debug`, `tds_list_templates`, `tds_doctor`. Agents can call these directly without shell parsing.
+
+### Live editing with `tds watch`
+
+Edit a screenplay, see results instantly:
+
+```bash
+tds watch screenplay.yaml --mode scripted --output gif --output-dir outputs
+```
+
+The watcher polls for file changes, debounces saves, and re-renders automatically. Pair it with a GIF viewer for a live preview loop.
 
 ### Install as a skill
 
