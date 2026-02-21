@@ -53,14 +53,26 @@ runs:
       with:
         python-version: ${{ inputs.python_version }}
 
+    - name: Guard unsupported modes
+      if: inputs.mode != 'scripted_vhs' && inputs.mode != 'auto'
+      shell: bash
+      run: |
+        echo "::error::This action only supports mode=scripted_vhs (default)."
+        echo "The autonomous_pty and autonomous_video lanes require"
+        echo "additional system dependencies (kitty, xvfb, etc.) that are"
+        echo "not provisioned by this action. Use Docker mode or a"
+        echo "self-hosted runner with those dependencies pre-installed."
+        echo ""
+        echo "Received mode: ${{ inputs.mode }}"
+        exit 1
+
     - name: Set up Go (scripted lane)
-      if: inputs.mode == 'scripted_vhs'
       uses: actions/setup-go@v5
       with:
         go-version: "1.22"
 
     - name: Install render dependencies (scripted lane, Linux)
-      if: runner.os == 'Linux' && inputs.mode == 'scripted_vhs'
+      if: runner.os == 'Linux'
       shell: bash
       run: |
         sudo apt-get update
@@ -69,16 +81,16 @@ runs:
         echo "$HOME/go/bin" >> "$GITHUB_PATH"
 
     - name: Install render dependencies (scripted lane, macOS)
-      if: runner.os == 'macOS' && inputs.mode == 'scripted_vhs'
+      if: runner.os == 'macOS'
       shell: bash
       run: |
         brew install ffmpeg ttyd vhs
 
     - name: Guard unsupported scripted lane on Windows
-      if: runner.os == 'Windows' && inputs.mode == 'scripted_vhs'
+      if: runner.os == 'Windows'
       shell: bash
       run: |
-        echo "Scripted render in this action currently supports Linux/macOS only."
+        echo "::error::Scripted render in this action supports Linux/macOS only."
         exit 1
 
     - name: Install terminal-demo-studio
