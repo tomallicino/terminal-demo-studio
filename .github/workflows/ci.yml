@@ -11,6 +11,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - name: Checkout
@@ -19,7 +20,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: |
@@ -45,23 +46,23 @@ jobs:
           tds run examples/mock/agent_loop.yaml --mode autonomous_pty --output-dir outputs
 
       - name: Installed-context smoke
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && matrix.python-version == '3.11'
         shell: bash
         run: ./scripts/install_context_smoke.sh
 
       - name: Release preflight
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && matrix.python-version == '3.11'
         shell: bash
         run: ./scripts/release_preflight.sh
 
       - name: Set up Go
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && matrix.python-version == '3.11'
         uses: actions/setup-go@v5
         with:
           go-version: "1.22"
 
       - name: Install render dependencies (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.python-version == '3.11'
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg ttyd kitty xvfb
@@ -69,12 +70,12 @@ jobs:
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
 
       - name: Install render dependencies (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && matrix.python-version == '3.11'
         run: |
           brew install ffmpeg ttyd vhs
 
       - name: Probe scripted render prerequisites
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && matrix.python-version == '3.11'
         shell: bash
         run: |
           python - <<'PY'
@@ -107,18 +108,24 @@ jobs:
           PY
 
       - name: Portable mock render smoke
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && matrix.python-version == '3.11'
         run: |
           tds render examples/mock/install_first_command.yaml --mode scripted_vhs --local --output-dir outputs --output gif
 
       - name: Autonomous video smoke (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.python-version == '3.11'
+        env:
+          TDS_SETUP_TIMEOUT_SECONDS: "180"
         run: |
+          # Start a persistent Xvfb instance to ensure display is ready
+          Xvfb :99 -screen 0 1440x900x24 -nolisten tcp &
+          sleep 1
+          export DISPLAY=:99
           tds run examples/mock/autonomous_video_codex_like.yaml --mode autonomous_video --local --output-dir outputs --output mp4
           tds run examples/mock/autonomous_video_claude_like.yaml --mode autonomous_video --local --output-dir outputs --output mp4
 
       - name: Upload autonomous video artifacts
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.python-version == '3.11'
         uses: actions/upload-artifact@v4
         with:
           name: autonomous-video-mp4
@@ -127,12 +134,12 @@ jobs:
           if-no-files-found: error
 
       - name: README smoke
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.python-version == '3.11'
         shell: bash
         run: ./scripts/readme_smoke.sh
 
       - name: Composite action smoke
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.python-version == '3.11'
         id: action_smoke
         uses: ./.github/actions/render
         with:
@@ -144,7 +151,7 @@ jobs:
           comment_pr: false
 
       - name: Assert action smoke outputs
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.python-version == '3.11'
         shell: bash
         run: |
           test "${{ steps.action_smoke.outputs.status }}" = "success"

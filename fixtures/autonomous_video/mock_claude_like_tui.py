@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import sys
-import termios
-import tty
+
+_IS_WINDOWS = sys.platform == "win32"
+
+if _IS_WINDOWS:
+    import msvcrt
+else:
+    import termios
+    import tty
 
 
 def _render(plan_ready: bool, patch_applied: bool) -> None:
@@ -16,18 +22,20 @@ def _render(plan_ready: bool, patch_applied: bool) -> None:
     sys.stdout.flush()
 
 
+def _read_char() -> str:
+    if _IS_WINDOWS:
+        return msvcrt.getwch()
+    return sys.stdin.read(1)
+
+
 def main() -> int:
-    fd = sys.stdin.fileno()
-    previous = termios.tcgetattr(fd)
     plan_ready = False
     patch_applied = False
 
-    try:
-        tty.setraw(fd)
+    if _IS_WINDOWS:
         _render(plan_ready=plan_ready, patch_applied=patch_applied)
-
         while True:
-            char = sys.stdin.read(1)
+            char = _read_char()
             if not char:
                 continue
             if char == "n":
@@ -37,8 +45,25 @@ def main() -> int:
             elif char in {"q", "\x03"}:
                 break
             _render(plan_ready=plan_ready, patch_applied=patch_applied)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, previous)
+    else:
+        fd = sys.stdin.fileno()
+        previous = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            _render(plan_ready=plan_ready, patch_applied=patch_applied)
+            while True:
+                char = _read_char()
+                if not char:
+                    continue
+                if char == "n":
+                    plan_ready = True
+                elif char == "y" and plan_ready:
+                    patch_applied = True
+                elif char in {"q", "\x03"}:
+                    break
+                _render(plan_ready=plan_ready, patch_applied=patch_applied)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, previous)
 
     sys.stdout.write("\nSession complete\n")
     sys.stdout.flush()
